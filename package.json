@@ -1,0 +1,25 @@
+{
+    "name": "battleboxes-resurgence",
+    "version": "0.0.0",
+    "description": "BattleBoxes Multiplayer, but with AI bots and Not Spaghetti™ code!",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/spsquared/BattleBoxes-Resurgence.git"
+    },
+    "author": "Sampleprovider (sp)",
+    "license": "GPL-3.0",
+    "bugs": {
+        "url": "https://github.com/spsquared/BattleBoxes-Resurgence/issues"
+    },
+    "homepage": "https://github.com/spsquared/BattleBoxes-Resurgence#readme",
+    "scripts": {
+        "build": "npx tsc",
+        "compile": "npx tsc",
+        "start": "node build/server.js",
+        "compilerun": "npx tsc && node build/server.js"
+    },
+    "dependencies": {
+        "typescript": "^5.5.4"
+    },
+    "devDependencies": {}
+}
