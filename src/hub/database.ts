@@ -1,7 +1,6 @@
 import bcrypt from 'bcrypt';
-import { existsSync } from 'fs';
-import { FileHandle, open } from 'fs/promises';
-import { resolve as pathResolve } from 'path';
+import { closeSync, existsSync, openSync, readFile, readFileSync, writeFile, writeFileSync } from 'fs';
+import { resolve as pathResolve, resolve } from 'path';
 import { Client } from 'pg';
 
 import { decode as msgpackDecode, encode as msgpackEncode } from '@msgpack/msgpack';
@@ -84,72 +83,79 @@ export interface FileDatabaseConstructorParams {
  */
 export class FileDatabase implements Database {
     readonly logger: NamedLogger;
-    private readonly file: Promise<FileHandle>;
+    private readonly file: string;
     private readonly data: {
         accounts: Map<string, FileDatabaseAccount>
     } = {
             accounts: new Map()
         };
     private readonly saveInterval: NodeJS.Timeout;
-    private readonly ready: Promise<any>;
 
     constructor({ path, logger }: FileDatabaseConstructorParams) {
         this.logger = new NamedLogger(logger, 'FileDatabase');
-        const dbPath = pathResolve(path ?? config.path, 'database.db');
-        // create file contents if doesn't exist
-        const createNewDb = !existsSync(dbPath);
-        this.file = open(dbPath, 'w+');
-        this.ready = createNewDb ? this.writetoFile() : this.file;
+        this.file = pathResolve(path ?? config.path, 'database.db');
+        if (!existsSync(this.file)) this.writetoFile();
         this.saveInterval = setInterval(() => this.writetoFile(), 60000);
     }
 
-    // ensures no overlapping `writeFile` calls while also ensuring latest data is saved
-    private writeQueue: number = 0;
-    private async writetoFile(): Promise<void> {
-        this.writeQueue++;
-        if (this.writeQueue > 1) return;
-        while (this.writeQueue > 0) {
+    #activity: Set<Promise<void>> = new Set();
+    private async writetoFile() {
+        await this.#activity;
+        const op = new Promise<void>((resolve) => {
             const data = {
                 accounts: Array.from(this.data.accounts.entries()).reduce<Record<string, FileDatabaseAccount>>((p, c) => {
                     p[c[0]] = c[1];
                     return p;
                 }, {})
             };
-            await (await this.file).writeFile(msgpackEncode(data));
-            await (await this.file).sync();
             console.log('write')
-            this.writeQueue--;
-        }
+            writeFile(this.file, msgpackEncode(data), (err) => {
+                console.log('write end')
+                if (err) {
+                    this.logger.handleFatal('Fatal database error:', err);
+                    process.exit(1);
+                }
+                resolve();
+                this.#activity.delete(op);
+            });
+        });
+        this.#activity.add(op);
+        await op;
     }
 
     async connect(): Promise<void> {
-        await this.ready;
-        await (await this.file).sync();
-        const dsfdsf = await (await this.file).readFile()
-        console.log(dsfdsf)
-        const data: any = msgpackDecode(dsfdsf);
-        if (data == null || typeof data != 'object') {
-            this.logger.fatal('Database file is of invalid type');
-            this.logger.fatal('Contents: ' + JSON.stringify(data));
-            process.exit(1);
-        }
-        this.data.accounts.clear();
-        for (const username in data.accounts) {
-            this.data.accounts.set(username, data.accounts[username]);
-        }
+        await Promise.all(this.#activity);
+        await new Promise<void>((resolve) => {
+            readFile(this.file, (err, raw) => {
+                try {
+                    const data: any = msgpackDecode(raw);
+                    if (data == null || typeof data != 'object') {
+                        this.logger.fatal('Database file is of invalid type');
+                        this.logger.fatal('Contents: ' + JSON.stringify(data));
+                        process.exit(1);
+                    }
+                    this.data.accounts.clear();
+                    for (const username in data.accounts) {
+                        this.data.accounts.set(username, data.accounts[username]);
+                    }
+                    resolve();
+                } catch (err) {
+                    this.logger.fatal('Database file is of invalid type');
+                    process.exit(1);
+                }
+            });
+        });
     }
     async disconnect(): Promise<void> {
         clearInterval(this.saveInterval);
         await this.writetoFile();
-        (await this.file).close();
+        await Promise.all(this.#activity);
     }
 
     async getAccountList(): Promise<string[] | null> {
-        await this.ready;
         return Array.from(this.data.accounts.keys());
     }
     async createAccount(username: string, password: string, userData: AccountData): Promise<AccountOpResult.SUCCESS | AccountOpResult.ALREADY_EXISTS> {
-        await this.ready;
         if (this.data.accounts.has(username)) return AccountOpResult.ALREADY_EXISTS;
         this.data.accounts.set(username, {
             ...userData,
@@ -159,20 +165,17 @@ export class FileDatabase implements Database {
         return AccountOpResult.SUCCESS;
     }
     async checkAccount(username: string, password: string): Promise<AccountOpResult.SUCCESS | AccountOpResult.NOT_EXISTS | AccountOpResult.INCORRECT_CREDENTIALS> {
-        await this.ready;
         if (!this.data.accounts.has(username)) return AccountOpResult.NOT_EXISTS;
         if (await bcrypt.compare(password, this.data.accounts.get(username)!.password)) return AccountOpResult.SUCCESS;
         return AccountOpResult.INCORRECT_CREDENTIALS;
     }
     async getAccountData(username: string): Promise<AccountData | AccountOpResult.NOT_EXISTS> {
-        await this.ready;
         if (!this.data.accounts.has(username)) return AccountOpResult.NOT_EXISTS;
         const ret: any = structuredClone(this.data.accounts.get(username)!);
         ret.password = undefined;
         return ret;
     }
     async updateAccountData(userData: AccountData): Promise<AccountOpResult.SUCCESS | AccountOpResult.NOT_EXISTS> {
-        await this.ready;
         if (!this.data.accounts.has(userData.username)) return AccountOpResult.NOT_EXISTS;
         // object moment
         const existing = this.data.accounts.get(userData.username)!;
@@ -182,7 +185,6 @@ export class FileDatabase implements Database {
         return AccountOpResult.SUCCESS;
     }
     async changeAccountPassword(username: string, password: string, newPassword: string): Promise<AccountOpResult.SUCCESS | AccountOpResult.NOT_EXISTS | AccountOpResult.INCORRECT_CREDENTIALS> {
-        await this.ready;
         const res = await this.checkAccount(username, password);
         if (res != AccountOpResult.SUCCESS) return res;
         if (!this.data.accounts.has(username)) return AccountOpResult.NOT_EXISTS; // small chance of deletion mid-function
@@ -194,7 +196,6 @@ export class FileDatabase implements Database {
         return AccountOpResult.SUCCESS
     }
     async deleteAccount(username: string, password: string): Promise<AccountOpResult.SUCCESS | AccountOpResult.NOT_EXISTS | AccountOpResult.INCORRECT_CREDENTIALS> {
-        await this.ready;
         const res = await this.checkAccount(username, password);
         if (res != AccountOpResult.SUCCESS) return res;
         this.data.accounts.delete(username);
