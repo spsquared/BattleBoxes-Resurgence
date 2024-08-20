@@ -23,3 +23,13 @@ node_modules/
 
 # Typescript outputs
 build/
+
+# Configuration files
+config.json
+.env
+*.pem
+*.crt
+*.key
+
+# local database
+database.db

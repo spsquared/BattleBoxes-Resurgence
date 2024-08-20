@@ -1,25 +1,30 @@
 {
     "name": "battleboxes-resurgence",
-    "version": "0.0.0",
-    "description": "BattleBoxes Multiplayer, but with AI bots and Not Spaghetti™ code!",
-    "repository": {
-        "type": "git",
-        "url": "git+https://github.com/spsquared/BattleBoxes-Resurgence.git"
-    },
-    "author": "Sampleprovider (sp)",
-    "license": "GPL-3.0",
-    "bugs": {
-        "url": "https://github.com/spsquared/BattleBoxes-Resurgence/issues"
-    },
-    "homepage": "https://github.com/spsquared/BattleBoxes-Resurgence#readme",
+    "private": true,
     "scripts": {
-        "build": "npx tsc",
-        "compile": "npx tsc",
-        "start": "node build/server.js",
-        "compilerun": "npx tsc && node build/server.js"
+        "build": "tsc && tsc-alias -p tsconfig.json",
+        "compile": "tsc && tsc-alias -p tsconfig.json",
+        "start": "node build/main.js",
+        "compilerun": "npm run compile && node build/main.js"
     },
     "dependencies": {
+        "@msgpack/msgpack": "^3.0.0-beta2",
+        "bcrypt": "^5.1.1",
+        "cookie-parser": "^1.4.6",
+        "cors": "^2.8.5",
+        "dotenv": "^16.4.5",
+        "express": "^4.19.2",
+        "express-rate-limit": "^7.4.0",
+        "pg": "^8.12.0",
+        "socket.io": "^4.7.5",
         "typescript": "^5.5.4"
     },
-    "devDependencies": {}
+    "devDependencies": {
+        "@types/bcrypt": "^5.0.2",
+        "@types/cookie-parser": "^1.4.7",
+        "@types/express": "^4.17.21",
+        "@types/node": "^22.0.1",
+        "@types/pg": "^8.11.6",
+        "tsc-alias": "^1.8.10"
+    }
 }
