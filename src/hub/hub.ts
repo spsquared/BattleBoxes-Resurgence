@@ -41,7 +41,11 @@ const limiter = rateLimit({
     }
 });
 app.use(limiter);
-app.use(cors({ origin: '*' }));
+app.use(cors({
+    origin: [/https?:\/\/localhost:[0-9]{1,5}/], // /https:\/\/(?:.+\.)*wwppc\.tech/
+    credentials: true,
+    allowedHeaders: 'Content-Type,Cookie'
+}));
 app.use(cookieParser());
 // in case server is not running
 app.get('/wakeup', (req, res) => res.json('ok'));
@@ -61,8 +65,13 @@ const database = config.useFileDatabase ? new FileDatabase({
 // complete networking
 if (config.debugMode) logger.info('Creating Socket.IO server');
 const io = new SocketIOServer(server, {
-    cors: { origin: '*', methods: ['GET', 'POST'] }
+    cors: {
+        origin: '*', methods: ['GET', 'POST'],
+        credentials: true
+    }
 });
+import { addClientRoutes } from './clients';
+addClientRoutes(app, database, logger);
 
 // listen
 Promise.all([

@@ -30,6 +30,10 @@ const config: {
     readonly rsaKeyRotateInterval: number
     /**Use a local file as database instead of a PostgreSQL database (default: false) */
     readonly useFileDatabase: boolean
+    /**Time in minutes until authentication tokens expire (default: 360) */
+    readonly tokenExpireTime: number
+    /**Time in minutes until session tokens expire (default: 60) */
+    readonly sessionExpireTime: number
     /**Enable debug logging (default: false) */
     readonly debugMode: boolean
     /**Same as the `BASE_PATH` environment variable (this cannot be edited in `config.json``) */
@@ -44,6 +48,8 @@ const config: {
     maxSignupPerMinute: fileConfig.maxSignupPerMinute ?? 1,
     rsaKeyRotateInterval: fileConfig.rsaKeyRotateInterval ?? 86400000,
     useFileDatabase: fileConfig.useFileDatabase ?? false,
+    tokenExpireTime: fileConfig.tokenExpireTime ?? 360,
+    sessionExpireTime: fileConfig.sessionExpireTime ?? 60,
     debugMode: process.argv.includes('debug_mode') ?? process.env.DEBUG_MODE ?? fileConfig.debugMode ?? false,
     path: process.env.BASE_PATH,
     configPath: process.env.CONFIG_PATH,

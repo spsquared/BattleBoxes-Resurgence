@@ -1,6 +1,6 @@
 import bcrypt from 'bcrypt';
-import { closeSync, existsSync, openSync, readFile, readFileSync, writeFile, writeFileSync } from 'fs';
-import { resolve as pathResolve, resolve } from 'path';
+import { existsSync, readFile, writeFile } from 'fs';
+import { resolve as pathResolve } from 'path';
 import { Client } from 'pg';
 
 import { decode as msgpackDecode, encode as msgpackEncode } from '@msgpack/msgpack';
@@ -31,10 +31,9 @@ export interface Database {
      * Create an account in the database.
      * @param {string} username Unique username - operation fails if not distinct
      * @param {string} password Password - irretrievable after write, will be encrypted with bcrypt
-     * @param {AccountData} userData Accompanying data - not all is used
      * @returns {AccountOpResult} Creation status
      */
-    createAccount(username: string, password: string, userData: AccountData): Promise<AccountOpResult>;
+    createAccount(username: string, password: string): Promise<AccountOpResult>;
     /**
      * Check credentials against an existing account.
      * @param {string} username Username
@@ -108,9 +107,7 @@ export class FileDatabase implements Database {
                     return p;
                 }, {})
             };
-            console.log('write')
             writeFile(this.file, msgpackEncode(data), (err) => {
-                console.log('write end')
                 if (err) {
                     this.logger.handleFatal('Fatal database error:', err);
                     process.exit(1);
@@ -155,12 +152,25 @@ export class FileDatabase implements Database {
     async getAccountList(): Promise<string[] | null> {
         return Array.from(this.data.accounts.keys());
     }
-    async createAccount(username: string, password: string, userData: AccountData): Promise<AccountOpResult.SUCCESS | AccountOpResult.ALREADY_EXISTS> {
+    async createAccount(username: string, password: string): Promise<AccountOpResult.SUCCESS | AccountOpResult.ALREADY_EXISTS> {
         if (this.data.accounts.has(username)) return AccountOpResult.ALREADY_EXISTS;
         this.data.accounts.set(username, {
-            ...userData,
             username: username,
             password: await bcrypt.hash(password, salt),
+            xp: 0,
+            trackers: {
+                time: 0,
+                distanceMoved: 0,
+                airTime: 0,
+                jumps: 0,
+                fallDistance: 0,
+                shotsFired: 0,
+                damageDealt: 0,
+                damagetaken: 0,
+                damageAbsorbed: 0,
+                lootboxesOpened: 0
+            },
+            achievements: []
         });
         return AccountOpResult.SUCCESS;
     }
@@ -271,7 +281,7 @@ export class PsqlDatabase implements Database {
             if (config.debugMode) this.logger.debug(`getAccountList in ${performance.now() - startTime}ms`, true);
         }
     }
-    async createAccount(username: string, password: string, userData: AccountData): Promise<AccountOpResult.SUCCESS | AccountOpResult.ALREADY_EXISTS | AccountOpResult.ERROR> {
+    async createAccount(username: string, password: string): Promise<AccountOpResult.SUCCESS | AccountOpResult.ALREADY_EXISTS | AccountOpResult.ERROR> {
         const startTime = performance.now();
         try {
             const encryptedPassword = await bcrypt.hash(password, salt);
@@ -387,15 +397,15 @@ export class PsqlDatabase implements Database {
 /**Response codes for operations involving account data */
 export enum AccountOpResult {
     /**The operation was completed successfully */
-    SUCCESS = 0,
+    SUCCESS,
     /**The operation failed because database cannot not overwrite existing account */
-    ALREADY_EXISTS = 1,
+    ALREADY_EXISTS,
     /**The operation failed because the requested account does not exist */
-    NOT_EXISTS = 2,
+    NOT_EXISTS,
     /**The operation failed because of an authentication failure */
-    INCORRECT_CREDENTIALS = 3,
+    INCORRECT_CREDENTIALS,
     /**The operation failed because of an unexpected issue */
-    ERROR = 4
+    ERROR
 }
 
 /**Descriptor for an account */
