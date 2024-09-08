@@ -1,5 +1,6 @@
 import fs from 'fs';
 import { resolve as pathResolve } from 'path';
+import { MessagePort } from 'worker_threads';
 
 export interface Logger {
     /**
@@ -59,8 +60,9 @@ export interface Logger {
  * A simple logging class with timestamps and logging levels that writes to file and stdout.
  */
 export class FileLogger implements Logger {
-    #file?: number;
-    #activity: Set<Promise<void>> = new Set();
+    private readonly file: number;
+    private closed: boolean = false;
+    private activity: Set<Promise<void>> = new Set();
 
     /**
      * Create a new `FileLogger` in a specified directory. Creating a `FileLogger` will also create a
@@ -71,19 +73,15 @@ export class FileLogger implements Logger {
     constructor(path: string) {
         path = pathResolve(__dirname, path);
         if (!fs.existsSync(path)) fs.mkdirSync(path, { recursive: true });
-        try {
-            const date = new Date();
-            let filePath = pathResolve(path, `${date.getUTCFullYear()}-${date.getUTCMonth()}-${date.getUTCDate()}_${date.getUTCHours()}-${date.getUTCMinutes()}-${date.getUTCSeconds()}_log`);
-            if (fs.existsSync(filePath + '.log')) {
-                let i = 1;
-                while (fs.existsSync(filePath + i + '.log')) i++;
-                filePath += i;
-            }
-            this.#file = fs.openSync(filePath + '.log', 'a');
-            this.info('Logger instance created');
-        } catch (err) {
-            console.error(err);
+        const date = new Date();
+        let filePath = pathResolve(path, `${date.getUTCFullYear()}-${date.getUTCMonth()}-${date.getUTCDate()}_${date.getUTCHours()}-${date.getUTCMinutes()}-${date.getUTCSeconds()}_log`);
+        if (fs.existsSync(filePath + '.log')) {
+            let i = 1;
+            while (fs.existsSync(filePath + i + '.log')) i++;
+            filePath += i;
         }
+        this.file = fs.openSync(filePath + '.log', 'a');
+        this.info('Logger instance created');
     }
 
     timestamp(): string {
@@ -101,19 +99,19 @@ export class FileLogger implements Logger {
         return `${time.getFullYear()}-${month}-${day} [${hour}:${minute}:${second}]`;
     }
     debug(text: string, logOnly = false) {
-        this.#append('debug', text, 36, logOnly);
+        this.append('debug', text, 36, logOnly);
     }
     info(text: string, logOnly = false) {
-        this.#append(' info', text, 34, logOnly);
+        this.append(' info', text, 34, logOnly);
     }
     warn(text: string, logOnly = false) {
-        this.#append(' warn', text, 33, logOnly);
+        this.append(' warn', text, 33, logOnly);
     }
     error(text: string, logOnly = false) {
-        this.#append('error', text, 31, logOnly);
+        this.append('error', text, 31, logOnly);
     }
     fatal(text: string, logOnly = false) {
-        this.#append('fatal', text, 35, logOnly);
+        this.append('fatal', text, 35, logOnly);
     }
     handleError(message: string, error: any) {
         this.error(message);
@@ -142,33 +140,33 @@ export class FileLogger implements Logger {
         }
     }
 
-    #append(level: string, text: string, color: number, logOnly = false) {
-        if (this.#file == undefined) return;
+    private append(level: string, text: string, color: number, logOnly = false) {
+        if (this.file == undefined) return;
         if (!logOnly) {
             let prefix1 = `\x1b[0m\x1b[32m${this.timestamp()} \x1b[1m\x1b[${color}m${level.toUpperCase()}\x1b[0m | `;
             process.stdout.write(`${prefix1}${text.toString().replaceAll('\n', `\n\r${prefix1}`)}\n\r`);
         }
         let prefix2 = `${this.timestamp()} ${level.toUpperCase()} | `;
-        const fd = this.#file;
+        const fd = this.file;
         const op = new Promise<void>((resolve) => fs.appendFile(fd, `${prefix2}${text.toString().replaceAll('\n', `\n${prefix2}`)}\n`, { encoding: 'utf-8' }, (err) => {
             if (err) console.error(err);
             resolve();
-            this.#activity.delete(op);
+            this.activity.delete(op);
         }));
-        this.#activity.add(op);
+        this.activity.add(op);
     }
 
     async destroy() {
-        if (this.#file == undefined) return;
+        if (this.closed) return;
         this.info('Logger instance destroyed');
-        await Promise.all(this.#activity);
-        fs.closeSync(this.#file);
-        this.#file = undefined;
+        await Promise.all(this.activity);
+        fs.closeSync(this.file);
+        this.closed = true;
     }
 }
 
 /**
- * An extension of any other Logger that adds a name prefix to all messages.
+ * An extension of any other `Logger` instance that adds a name prefix to all messages.
  */
 export class NamedLogger implements Logger {
     readonly logger: Logger;
@@ -203,26 +201,120 @@ export class NamedLogger implements Logger {
         this.logger.fatal(`[${this.name}] ${text.replaceAll('\n', `\n[${this.name}] `)}`, logOnly);
     }
     handleError(message: string, error: any) {
-        this.error(message);
-        if (error instanceof Error) {
-            this.error(error.message);
-            if (error.stack) this.error(error.stack);
-        } else {
-            this.error('' + error);
-        }
+        this.logger.handleError.call(this, message, error);
     }
     handleFatal(message: string, error: any) {
-        this.fatal(message);
-        if (error instanceof Error) {
-            this.fatal(error.message);
-            if (error.stack) this.fatal(error.stack);
-        } else {
-            this.fatal('' + error);
-        }
+        this.logger.handleFatal.call(this, message, error);
     }
 
     async destroy() {
         await this.logger.destroy();
+    }
+}
+
+/**
+ * The reciever that writes to a `Logger` instance in a pair of a `MessageChannelLoggerReciever` and {@link MessageChannelLoggerSender}.
+ * Communicates over a `MessageChannel` where the sender and reciever accept the opposite `MessagePort` returned by the `MessageChannel`.
+ */
+export class MessageChannelLoggerReciever {
+    readonly logger: Logger;
+    readonly selfLogger: NamedLogger;
+    readonly port: MessagePort;
+
+    /**
+     * @param {Logger} logger Logger to write to
+     * @param {MessagePort} port Corresponding other `MessagePort` of the `MessagePort` being used by a `MessageChannelLoggerSender`
+     */
+    constructor(logger: Logger, port: MessagePort) {
+        this.logger = logger;
+        this.selfLogger = new NamedLogger(this.logger, 'MessagePortLoggerReciever');
+        this.port = port;
+        this.port.on('message', (message: [number, any]) => {
+            if (!Array.isArray(message) || message.length != 2 || typeof message[0] != 'number' || !Array.isArray(message[1])) return;
+            switch (message[0]) {
+                case 0: this.logger.debug(message[1][0], message[1][1]);
+                case 1: this.logger.info(message[1][0], message[1][1]);
+                case 2: this.logger.warn(message[1][0], message[1][1]);
+                case 3: this.logger.error(message[1][0], message[1][1]);
+                case 4: this.logger.fatal(message[1][0], message[1][1]);
+                case 5: this.logger.handleError(message[1][0], message[1][1]);
+                case 6: this.logger.handleFatal(message[1][0], message[1][1]);
+                case 7: this.logger.destroy();
+                case 8: this.selfLogger.handleError('MessagePort error on remote:', message[1]);
+                default: this.selfLogger.error(`Unexpected method "${message[0]}" (payload ${message[1]})`);
+            }
+        });
+        this.port.on('messageerror', (err) => {
+            this.selfLogger.handleError('MessagePort error:', err);
+        });
+        this.port.on('close', () => {
+            this.selfLogger.warn('The MessageChannel was unexpectedly closed');
+        });
+    }
+}
+
+/**
+ * The sender in a pair of a {@link MessageChannelLoggerReciever} and `MessageChannelLoggerSender.
+ * Communicates over a `MessageChannel` where the sender and reciever accept the opposite `MessagePort` returned by the `MessageChannel`.
+ * 
+ * *Note that log messages will be lost if a `MessageChannelLoggerReciever` is not on the opposite `MessagePort`.*
+ */
+export class MessageChannelLoggerSender implements Logger {
+    readonly port: MessagePort;
+
+    /**
+     * @param {MessagePort} port Corresponding other `MessagePort` of the `MessagePort` being used by a `MessageChannelLoggerReciever`
+     */
+    constructor(port: MessagePort) {
+        this.port = port;
+        this.port.on('messageerror', (err) => {
+            this.port.postMessage([8, err]);
+            console.error('MessagePortLoggerSender error:');
+            console.error(err);
+        });
+        this.port.on('close', () => {
+            console.warn('MessagePortLoggerSender MessageChannel was unexpectedly closed');
+        });
+    }
+
+    timestamp(): string {
+        const time = new Date();
+        let month = (time.getMonth() + 1).toString();
+        let day = time.getDate().toString();
+        let hour = time.getHours().toString();
+        let minute = time.getMinutes().toString();
+        let second = time.getSeconds().toString();
+        if (month.length == 1) month = 0 + month;
+        if (day.length == 1) day = 0 + day;
+        if (hour.length == 1) hour = 0 + hour;
+        if (minute.length == 1) minute = 0 + minute;
+        if (second.length == 1) second = 0 + second;
+        return `${time.getFullYear()}-${month}-${day} [${hour}:${minute}:${second}]`;
+    }
+    debug(text: string, logOnly?: boolean): void {
+        this.port.postMessage([0, text, logOnly]);
+    }
+    info(text: string, logOnly?: boolean): void {
+        this.port.postMessage([1, text, logOnly]);
+    }
+    warn(text: string, logOnly?: boolean): void {
+        this.port.postMessage([2, text, logOnly]);
+    }
+    error(text: string, logOnly?: boolean): void {
+        this.port.postMessage([3, text, logOnly]);
+    }
+    fatal(text: string, logOnly?: boolean): void {
+        this.port.postMessage([4, text, logOnly]);
+    }
+    handleError(message: string, error: any): void {
+        this.port.postMessage([5, message, error]);
+    }
+    handleFatal(message: string, error: any): void {
+        this.port.postMessage([6, message, error]);
+    }
+
+    async destroy() {
+        this.port.postMessage([7]);
     }
 }
 

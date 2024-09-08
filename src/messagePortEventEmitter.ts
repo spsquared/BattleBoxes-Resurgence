@@ -17,7 +17,7 @@ export class MessagePortEventEmitter {
         this.port = messagePort;
         this.port.on('message', (message: [string, any]) => {
             // will ignore malformed messages possibly caused by outside code
-            if (!Array.isArray(message) || message.length != 2 || typeof message[0] != 'string') return;
+            if (!Array.isArray(message) || message.length != 2 || typeof message[0] != 'string' || !Array.isArray(message[1])) return;
             this.listeners.get(message[0])?.forEach((listener) => listener(...message[1]));
         });
         this.port.on('close', () => {
