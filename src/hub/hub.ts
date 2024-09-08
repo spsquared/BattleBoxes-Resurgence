@@ -53,7 +53,6 @@ app.get('/wakeup', (req, res) => res.json('ok'));
 // init modules
 import { Server as SocketIOServer } from 'socket.io';
 import { PsqlDatabase, FileDatabase } from './database';
-
 const database = config.useFileDatabase ? new FileDatabase({
     logger: logger
 }) : new PsqlDatabase({
@@ -62,16 +61,21 @@ const database = config.useFileDatabase ? new FileDatabase({
     logger: logger
 });
 
-// complete networking
+// init game
+import { GameHostManager } from './hostRunner';
 if (config.debugMode) logger.info('Creating Socket.IO server');
 const io = new SocketIOServer(server, {
+    path: '/game-socketio',
     cors: {
         origin: '*', methods: ['GET', 'POST'],
         credentials: true
     }
 });
+const hostManager = new GameHostManager(io, database, logger);
+
+// complete networking
 import { addClientRoutes } from './clients';
-addClientRoutes(app, database, logger);
+addClientRoutes(app, database, hostManager, logger);
 
 // listen
 Promise.all([

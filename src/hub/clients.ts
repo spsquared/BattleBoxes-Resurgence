@@ -1,20 +1,22 @@
 // handles the authentication and then hands over to HostManager instance when joining games
 
 import bodyParser from 'body-parser';
-import { Express } from 'express';
+import { Express, NextFunction, RequestHandler } from 'express';
 
 import config from '@/config';
 import Logger, { NamedLogger } from '@/log';
 
 import { AccountOpResult, Database } from './database';
 import { SessionTokenHandler } from './cryptoUtil';
+import { GameHostManager } from './hostRunner';
 
 /**
  * Ravioli function to segment client networking (loggin in, joining games, viewing accounts, etc.)
  */
-export const addClientRoutes = (expapp: Express, db: Database, extLog: Logger) => {
+export const addClientRoutes = (expapp: Express, db: Database, hosts: GameHostManager, extLog: Logger) => {
     const app = expapp;
     const database = db;
+    const hostManager = hosts;
     const logger = new NamedLogger(extLog, 'ClientHandlers');
 
     const accountOpToHttpCode = (stat: AccountOpResult): number => {
@@ -27,13 +29,12 @@ export const addClientRoutes = (expapp: Express, db: Database, extLog: Logger) =
         }
     };
 
-    // auth
+    // authentication
     const authTokens = new SessionTokenHandler<string>();
     const sessionTokens = new SessionTokenHandler<string>();
-    // require auth for all requests by default
-    app.use('/*', (req, res, next) => {
+    const authentication: RequestHandler = (req, res, next) => {
         // don't want to block login request
-        if (req.method == 'POST' && (req.baseUrl == '/login' || req.baseUrl == '/signup')) next();
+        if (req.method == 'POST' && (req.url == '/login' || req.url == '/signup')) next();
         else if (typeof req.cookies.sessToken == 'string' && sessionTokens.tokenExists(req.cookies.sessToken)) {
             sessionTokens.extendTokenExpiration(req.cookies.sessToken, config.sessionExpireTime * 60);
             next();
@@ -46,15 +47,15 @@ export const addClientRoutes = (expapp: Express, db: Database, extLog: Logger) =
             });
             next();
         } else res.sendStatus(401);
-    });
-    app.get('/loginTest', (req, res) => {
-        // can only reach if logged in, also used to check if logged in
-        res.sendStatus(200);
-    });
+    };
     const checkValidCreds = (username: string, password: string) => {
         return typeof username == 'string' && username.length >= 3 && username.length <= 16 && /^[a-z0-9\-_]*$/.test(username) && typeof password == 'string' && password.length > 0 && password.length <= 128
     };
-    app.post('/login', bodyParser.json(), async (req, res) => {
+    app.get('/loginTest', authentication, (req, res) => {
+        // can only reach if logged in, also used to check if logged in
+        res.sendStatus(200);
+    });
+    app.post('/login', authentication, bodyParser.json(), async (req, res) => {
         if (req.body == null || !checkValidCreds(req.body.username, req.body.password)) {
             logger.debug(`/login validation failed: recieved ${JSON.stringify(req.body)}`);
             res.sendStatus(400);
@@ -73,7 +74,7 @@ export const addClientRoutes = (expapp: Express, db: Database, extLog: Logger) =
         }
         res.sendStatus(accountOpToHttpCode(stat));
     });
-    app.post('/signup', bodyParser.json(), async (req, res) => {
+    app.post('/signup', authentication, bodyParser.json(), async (req, res) => {
         if (req.body == null || !checkValidCreds(req.body.username, req.body.password)) {
             logger.debug(`/signup validation failed: recieved ${JSON.stringify(req.body)}`);
             res.sendStatus(400);
@@ -104,5 +105,12 @@ export const addClientRoutes = (expapp: Express, db: Database, extLog: Logger) =
             secure: true
         });
         res.sendStatus(200);
+    });
+
+    // creating/joining games
+    app.get('/games/gameList', authentication, (req, res) => {
+        const games = hostManager.getHosts(true).map((host) => ({
+            id: host.id
+        }));
     });
 };

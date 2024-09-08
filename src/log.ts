@@ -70,16 +70,16 @@ export class FileLogger implements Logger {
      */
     constructor(path: string) {
         path = pathResolve(__dirname, path);
-        if (!fs.existsSync(path)) throw new Error('"path" must be a valid directory');
+        if (!fs.existsSync(path)) fs.mkdirSync(path, { recursive: true });
         try {
-            let filePath = pathResolve(path, 'log.log');
-            if (fs.existsSync(filePath)) {
-                let dirPath = pathResolve(path, 'logs/');
-                if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath);
-                let fileCount = fs.readdirSync(dirPath).length;
-                fs.renameSync(filePath, pathResolve(dirPath, `log-${fileCount}.log`));
+            const date = new Date();
+            let filePath = pathResolve(path, `${date.getUTCFullYear()}-${date.getUTCMonth()}-${date.getUTCDate()}_${date.getUTCHours()}-${date.getUTCMinutes()}-${date.getUTCSeconds()}_log`);
+            if (fs.existsSync(filePath + '.log')) {
+                let i = 1;
+                while (fs.existsSync(filePath + i + '.log')) i++;
+                filePath += i;
             }
-            this.#file = fs.openSync(filePath, 'a');
+            this.#file = fs.openSync(filePath + '.log', 'a');
             this.info('Logger instance created');
         } catch (err) {
             console.error(err);

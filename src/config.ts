@@ -53,7 +53,7 @@ const config: {
     debugMode: process.argv.includes('debug_mode') ?? process.env.DEBUG_MODE ?? fileConfig.debugMode ?? false,
     path: process.env.BASE_PATH,
     configPath: process.env.CONFIG_PATH,
-    logPath: process.env.LOG_PATH ?? fileConfig.logPath ?? path.resolve(__dirname, '../'),
+    logPath: process.env.LOG_PATH ?? fileConfig.logPath ?? path.resolve(__dirname, '../logs/'),
 };
 // when writing back to file, prevent environment variables and argument overrides also overwriting file configurations
 const config2: any = structuredClone(config);
@@ -61,7 +61,7 @@ config2.port = fileConfig.port ?? 2000;
 config2.debugMode = fileConfig.debugMode ?? false;
 delete config2.path;
 delete config2.configPath;
-config2.logPath = fileConfig.logPath ?? path.resolve(__dirname, '../');
+config2.logPath = fileConfig.logPath;
 try {
     fs.writeFileSync(configPath, JSON.stringify(config2, null, 4));
 } catch { }
