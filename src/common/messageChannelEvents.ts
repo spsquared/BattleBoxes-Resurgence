@@ -1,31 +1,54 @@
-import { MessagePort } from 'worker_threads';
+import { MessagePort, Worker } from 'worker_threads';
 
 /**
  * Adds `EventEmitter`-like functionality to `MessagePort` instances.
- * `MessagePortEventEmitter` is required on both ports of the `MessageChannel` to work, and
+ * `MessageChannelEventEmitter` is required on both ports of the `MessageChannel` to work, and
  * should function even if there are external `message` events send by other code.
  * 
- * `MessagePortEventEmitter` has two reserved events that should not be used: `close` and `error`.
+ * `MessageChannelEventEmitter` has two reserved events that should not be used: `close` and `error`.
  * These fire when the underlying `MessagePort` emits a `close` or `messageerror` event, respectively.
- * The `error` event carries one argument when fired: an `Error` object.
+ * If the `MessageChannelEventEmitter` was given a `Worker`, the `close` event fires upon the `exit`
+ * event and carries the exit code as an argument, a new `workererror` event is added for the `error`
+ * event, and a new `online` event is added for the `online` event. The `error` event carries one
+ * argument when fired: an `Error` object. If there are no listeners for the `error` and `workererror`
+ * events, the errors will be thrown.
  */
-export class MessagePortEventEmitter {
-    private readonly port: MessagePort;
+export class MessageChannelEventEmitter {
+    private readonly port: MessagePort | Worker;
     private readonly listeners: Map<string, Set<(...data: any) => any>> = new Map();
 
-    constructor(messagePort: MessagePort) {
+    /**
+     * @param {MessagePort | Worker} messagePort A `MessagePort` or `Worker`
+     */
+    constructor(messagePort: MessagePort | Worker) {
         this.port = messagePort;
         this.port.on('message', (message: [string, any]) => {
             // will ignore malformed messages possibly caused by outside code
             if (!Array.isArray(message) || message.length != 2 || typeof message[0] != 'string' || !Array.isArray(message[1])) return;
             this.listeners.get(message[0])?.forEach((listener) => listener(...message[1]));
         });
-        this.port.on('close', () => {
-            this.listeners.get('close')?.forEach((listener) => listener());
-        });
         this.port.on('messageerror', (err: Error) => {
-            this.listeners.get('close')?.forEach((listener) => listener(err));
+            const listeners = this.listeners.get('error');
+            if (listeners !== undefined) listeners.forEach((listener) => listener(err));
+            else throw err;
         });
+        if (this.port instanceof Worker) {
+            this.port.on('error', (err: Error) => {
+                const listeners = this.listeners.get('workererror');
+                if (listeners !== undefined) listeners.forEach((listener) => listener(err));
+                else throw err;
+            });
+            this.port.on('online', () => {
+                this.listeners.get('online')?.forEach((listener) => listener());
+            })
+            this.port.on('exit', (code: number) => {
+                this.listeners.get('close')?.forEach((listener) => listener(code));
+            });
+        } else {
+            this.port.on('close', () => {
+                this.listeners.get('close')?.forEach((listener) => listener());
+            });
+        }
     }
 
     /**
@@ -75,7 +98,7 @@ export class MessagePortEventEmitter {
      * @param {function} listener Listener function (can accept arbitrary number of arguments)
      * @alias {@link addEventListener}
      */
-    on(event: string, listener: (...data: any) => any):void {
+    on(event: string, listener: (...data: any) => any): void {
         this.addEventListener(event, listener);
     }
     /**

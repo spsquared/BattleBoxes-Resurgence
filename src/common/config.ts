@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 process.env.BASE_PATH ??= path.resolve(__dirname, '../');
+process.env.SCRIPT_PATH ??= __dirname;
 process.env.CONFIG_PATH ??= path.resolve(process.env.BASE_PATH, 'config/');
 const certPath = path.resolve(process.env.CONFIG_PATH, 'db-cert.pem');
 if (fs.existsSync(certPath)) process.env.DATABASE_CERT = fs.readFileSync(certPath, 'utf8');
@@ -38,6 +39,8 @@ const config: {
     readonly debugMode: boolean
     /**Same as the `BASE_PATH` environment variable (this cannot be edited in `config.json``) */
     readonly path: string
+    /**Same as the `SCRIPT_PATH` environment variable (this cannot be edited in `config.json``) */
+    readonly scriptPath: string
     /**Same as the `CONFIG_PATH` environment variable (this cannot be edited in `config.json``) */
     readonly configPath: string
     /**Directory to write logs to - server will also create a `logs` directory there (default: `../`) */
@@ -52,6 +55,7 @@ const config: {
     sessionExpireTime: fileConfig.sessionExpireTime ?? 60,
     debugMode: process.argv.includes('debug_mode') ?? process.env.DEBUG_MODE ?? fileConfig.debugMode ?? false,
     path: process.env.BASE_PATH,
+    scriptPath: process.env.SCRIPT_PATH,
     configPath: process.env.CONFIG_PATH,
     logPath: process.env.LOG_PATH ?? fileConfig.logPath ?? path.resolve(__dirname, '../logs/'),
 };

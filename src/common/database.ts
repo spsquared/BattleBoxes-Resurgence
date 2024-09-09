@@ -5,8 +5,8 @@ import { Client } from 'pg';
 
 import { decode as msgpackDecode, encode as msgpackEncode } from '@msgpack/msgpack';
 
-import config from '../config';
-import Logger, { NamedLogger } from '../log';
+import config from './config';
+import Logger, { NamedLogger } from './log';
 
 const salt = 5;
 

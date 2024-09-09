@@ -1,7 +1,13 @@
-import { Server as SocketIOServer, Namespace as SocketIONamespace } from 'socket.io';
 import { randomUUID as randomSecureUUID } from 'crypto';
-import { Database } from './database';
-import Logger, { NamedLogger } from '@/log';
+import { resolve as pathResolve } from 'path';
+import { Namespace as SocketIONamespace, Server as SocketIOServer } from 'socket.io';
+import { MessagePort, Worker } from 'worker_threads';
+
+import config from '@/common/config';
+import Logger, { MessageChannelLoggerReciever, NamedLogger } from '@/common/log';
+import { MessageChannelEventEmitter } from '@/common/messageChannelEvents';
+
+import { AccountOpResult, Database } from '../common/database';
 
 /**
  * Game room manager that creates `GameHost` instances for each room created.
@@ -46,7 +52,17 @@ export class GameHostManager {
             ...options
         }, this.logger.logger);
         this.hosts.set(runner.id, runner);
+        runner.onended(() => this.hosts.delete(runner.id));
         return runner;
+    }
+
+    /**
+     * Fetch a game host by its id.
+     * @param {string} id Id of the game host to find
+     * @returns {GameHostRunner | undefined} Game host or undefined if not found
+     */
+    getGame(id: string): GameHostRunner | undefined {
+        return this.hosts.get(id);
     }
 
     /**
@@ -58,6 +74,7 @@ export class GameHostManager {
         const runner = this.hosts.get(id);
         if (runner == undefined) return false;
         runner.end();
+        this.hosts.delete(id);
         return true;
     }
 }
@@ -76,13 +93,20 @@ export class GameHostRunner {
     private static readonly gameIds: Set<string> = new Set();
 
     readonly id: string;
+    private readonly worker: Worker;
+    private readonly workerMessenger: MessageChannelEventEmitter;
     private readonly io: SocketIONamespace;
     private readonly db: Database;
     private readonly logger: NamedLogger;
-    readonly host: string;
+    private readonly hostLogger: NamedLogger;
+    readonly hostUser: string;
     readonly options: GameHostOptions;
     private running: boolean = false;
     private ended: boolean = false;
+    private readonly readyPromise: Promise<void>;
+    private readonly endListeners: Set<() => any> = new Set();
+
+    private readonly authCodes: Map<string, string> = new Map();
 
     /**
      * @param {SocketIOServer} io Socket.IO server
@@ -97,31 +121,65 @@ export class GameHostRunner {
             this.id = Array.from(new Array(6), () => 'ABCDEFGHIJKLMNOPQRSTUVWXYZ012346789'.charAt(Math.floor(Math.random() * 36))).join('');
         } while (!GameHostRunner.gameIds.has(this.id));
         GameHostRunner.gameIds.add(this.id);
+        this.worker = new Worker(pathResolve(config.scriptPath, 'host/host.js'), {
+            name: this.id
+        });
+        this.workerMessenger = new MessageChannelEventEmitter(this.worker);
         this.io = io.of(this.id);
         this.db = db;
         this.logger = new NamedLogger(logger, 'GameHostRunner-' + this.id);
-        this.host = hostUsername;
+        this.hostLogger = new NamedLogger(logger, 'HostThread-' + this.id);
+        this.hostUser = hostUsername;
         this.options = options;
-        this.addPlayer(this.host);
+        // if this ever goes, there is an uh oh crash
+        this.workerMessenger.on('workererror', (err: Error) => {
+            this.hostLogger.handleFatal('Host thread terminated: ', err);
+        });
+        this.workerMessenger.on('error', (err: Error) => {
+            this.hostLogger.handleError('MessagePort error:', err);
+        });
+        this.workerMessenger.on('close', (code: number) => {
+            if (code == 0) this.hostLogger.info('Host thread exited');
+            else this.hostLogger.fatal('Host thread exited with non-zero exit code ' + code);
+        });
+        this.readyPromise = new Promise((resolve) => this.worker.on('online', () => resolve()));
+        this.readyPromise.then(() => this.logger.info('Host thread online'));
+        // more loggers
+        this.workerMessenger.once('logger', (loggingPort: MessagePort) => {
+            new MessageChannelLoggerReciever(this.hostLogger, loggingPort);
+        });
+        // also add the host
+        this.addPlayer(this.hostUser);
     }
 
     /**
      * Add a player to the game, returning a verification code the client must use to connect to the game. 
      * @param {string} username Username of player (checks for validity)
-     * @returns {string} Verification code
+     * @returns {Promise<string | null>} Verification code, or null if player does not actually exist
      */
-    addPlayer(username: string): string {
-        // fetch the player data and send to subprocess
-        return randomSecureUUID();
+    async addPlayer(username: string): Promise<string | AccountOpResult> {
+        const userData = await this.db.getAccountData(username);
+        if (typeof userData != 'object') return userData;
+        this.workerMessenger.emit('playerJoin', userData);
+        const authCode = randomSecureUUID();
+        this.authCodes.set(authCode, username);
+        return authCode;
     }
 
     /**
      * Kick a player from the game, returning if a player was kicked.
      * @param {stirng} username Username of player
-     * @returns {boolean} If a player was kicked
+     * @returns {Promise<boolean>} If a player was kicked
      */
-    kickPlayer(username: string): boolean {
+    async kickPlayer(username: string): Promise<boolean> {
         throw new Error('Not implemented');
+    }
+
+    /**
+     * If the underlying host thread is ready
+     */
+    get ready(): Promise<void> {
+        return this.readyPromise;
     }
 
     /**
@@ -138,10 +196,15 @@ export class GameHostRunner {
         return this.ended;
     }
 
+    onended(cb: () => any) {
+        this.endListeners.add(cb);
+    }
+
     /**
      * Safely ends the game. Calling `end()` on a game that already ended will not do anything.
      */
     end() {
-
+        GameHostRunner.gameIds.delete(this.id);
+        this.endListeners.forEach((cb) => cb());
     }
 }

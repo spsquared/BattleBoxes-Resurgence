@@ -6,7 +6,7 @@ import path from 'path';
 
 import { configDotenv } from 'dotenv';
 configDotenv({ path: path.resolve(__dirname, '../config/.env') });
-import config from '@/config';
+import config from '@/common/config';
 
 // verify environment variables exist
 if (['CONFIG_PATH', ...(!config.useFileDatabase ? ['DATABASE_URL'] : [])].some((v) => process.env[v] == undefined)) {
@@ -14,7 +14,7 @@ if (['CONFIG_PATH', ...(!config.useFileDatabase ? ['DATABASE_URL'] : [])].some((
 }
 
 // start server
-import { FileLogger } from '../log';
+import { FileLogger } from '../common/log';
 const logger = new FileLogger(config.logPath);
 logger.info('Starting server...');
 logger.debug('BASE_PATH: ' + config.path);
@@ -52,7 +52,7 @@ app.get('/wakeup', (req, res) => res.json('ok'));
 
 // init modules
 import { Server as SocketIOServer } from 'socket.io';
-import { PsqlDatabase, FileDatabase } from './database';
+import { PsqlDatabase, FileDatabase } from '../common/database';
 const database = config.useFileDatabase ? new FileDatabase({
     logger: logger
 }) : new PsqlDatabase({
@@ -76,6 +76,8 @@ const hostManager = new GameHostManager(io, database, logger);
 // complete networking
 import { addClientRoutes } from './clients';
 addClientRoutes(app, database, hostManager, logger);
+// default 404 everything
+app.use('/*', (req, res) => res.sendStatus(404));
 
 // listen
 Promise.all([

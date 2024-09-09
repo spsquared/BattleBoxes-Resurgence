@@ -1,13 +1,13 @@
 // handles the authentication and then hands over to HostManager instance when joining games
 
 import bodyParser from 'body-parser';
-import { Express, NextFunction, RequestHandler } from 'express';
+import { Express, RequestHandler } from 'express';
 
-import config from '@/config';
-import Logger, { NamedLogger } from '@/log';
+import config from '@/common/config';
+import Logger, { NamedLogger } from '@/common/log';
 
-import { AccountOpResult, Database } from './database';
 import { SessionTokenHandler } from './cryptoUtil';
+import { AccountOpResult, Database } from '../common/database';
 import { GameHostManager } from './hostRunner';
 
 /**
@@ -110,7 +110,22 @@ export const addClientRoutes = (expapp: Express, db: Database, hosts: GameHostMa
     // creating/joining games
     app.get('/games/gameList', authentication, (req, res) => {
         const games = hostManager.getHosts(true).map((host) => ({
-            id: host.id
+            id: host.id,
+            host: host.hostUser,
+            options: host.options
         }));
+        res.json(games);
+    });
+    app.post('/games/joinGame/:gameId', authentication, async (req, res) => {
+        const host = hostManager.getGame(req.params.gameId);
+        if (host === undefined) res.sendStatus(404);
+        else if (authTokens.tokenExists(req.cookies.authToken)) {
+            const authCode = await host.addPlayer(authTokens.tokenData(req.cookies.authToken)!);
+            if (authCode !== null) res.json(authCode);
+            else res.sendStatus(500);
+        } else res.sendStatus(500);
+    });
+    app.post('/games/createGame', authentication, bodyParser.json(), (req, res) => {
+
     });
 };

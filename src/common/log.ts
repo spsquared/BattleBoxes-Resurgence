@@ -220,6 +220,7 @@ export class MessageChannelLoggerReciever {
     readonly logger: Logger;
     readonly selfLogger: NamedLogger;
     readonly port: MessagePort;
+    private closed: boolean = false;
 
     /**
      * @param {Logger} logger Logger to write to
@@ -232,15 +233,15 @@ export class MessageChannelLoggerReciever {
         this.port.on('message', (message: [number, any]) => {
             if (!Array.isArray(message) || message.length != 2 || typeof message[0] != 'number' || !Array.isArray(message[1])) return;
             switch (message[0]) {
-                case 0: this.logger.debug(message[1][0], message[1][1]);
-                case 1: this.logger.info(message[1][0], message[1][1]);
-                case 2: this.logger.warn(message[1][0], message[1][1]);
-                case 3: this.logger.error(message[1][0], message[1][1]);
-                case 4: this.logger.fatal(message[1][0], message[1][1]);
-                case 5: this.logger.handleError(message[1][0], message[1][1]);
-                case 6: this.logger.handleFatal(message[1][0], message[1][1]);
-                case 7: this.logger.destroy();
-                case 8: this.selfLogger.handleError('MessagePort error on remote:', message[1]);
+                case 0: this.logger.debug(message[1][0], message[1][1]); break;
+                case 1: this.logger.info(message[1][0], message[1][1]); break;
+                case 2: this.logger.warn(message[1][0], message[1][1]); break;
+                case 3: this.logger.error(message[1][0], message[1][1]); break;
+                case 4: this.logger.fatal(message[1][0], message[1][1]); break;
+                case 5: this.logger.handleError(message[1][0], message[1][1]); break;
+                case 6: this.logger.handleFatal(message[1][0], message[1][1]); break;
+                case 7: this.closed = true; this.port.close(); break;
+                case 8: this.selfLogger.handleError('MessagePort error on remote:', message[1]); break;
                 default: this.selfLogger.error(`Unexpected method "${message[0]}" (payload ${message[1]})`);
             }
         });
@@ -248,6 +249,7 @@ export class MessageChannelLoggerReciever {
             this.selfLogger.handleError('MessagePort error:', err);
         });
         this.port.on('close', () => {
+            if (this.closed) return;
             this.selfLogger.warn('The MessageChannel was unexpectedly closed');
         });
     }
@@ -261,6 +263,7 @@ export class MessageChannelLoggerReciever {
  */
 export class MessageChannelLoggerSender implements Logger {
     readonly port: MessagePort;
+    private closed: boolean = false;
 
     /**
      * @param {MessagePort} port Corresponding other `MessagePort` of the `MessagePort` being used by a `MessageChannelLoggerReciever`
@@ -273,6 +276,7 @@ export class MessageChannelLoggerSender implements Logger {
             console.error(err);
         });
         this.port.on('close', () => {
+            if (this.closed) return;
             console.warn('MessagePortLoggerSender MessageChannel was unexpectedly closed');
         });
     }
@@ -313,7 +317,12 @@ export class MessageChannelLoggerSender implements Logger {
         this.port.postMessage([6, message, error]);
     }
 
+    /**
+     * Closes the `MessageChannel` instead of closing the logging session.
+     * `destroy()` must be called on the {@link MessageChannelLoggerReciever} to close the logging session.
+     */
     async destroy() {
+        this.closed = true;
         this.port.postMessage([7]);
     }
 }
