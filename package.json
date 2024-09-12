@@ -5,7 +5,7 @@
         "build": "tsc && tsc-alias -p tsconfig.json",
         "compile": "tsc && tsc-alias -p tsconfig.json",
         "start": "node build/main.js",
-        "compilerun": "npm run compile && node build/main.js"
+        "compilerun": "npm run compile && node build/main.js debug_mode"
     },
     "dependencies": {
         "@msgpack/msgpack": "^3.0.0-beta2",

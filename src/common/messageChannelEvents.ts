@@ -15,7 +15,7 @@ import { MessagePort, Worker } from 'worker_threads';
  */
 export class MessageChannelEventEmitter {
     private readonly port: MessagePort | Worker;
-    private readonly listeners: Map<string, Set<(...data: any) => any>> = new Map();
+    private readonly listeners: Map<string, Set<(...data: any[]) => any>> = new Map();
 
     /**
      * @param {MessagePort | Worker} messagePort A `MessagePort` or `Worker`
@@ -52,12 +52,12 @@ export class MessageChannelEventEmitter {
     }
 
     /**
-     * Emit an event with arbitrary data accompanying it.
+     * Emit an event with arbitrary data accompanying it. If the `data` is a `MessagePort` instance, it will automatically transfer it.
      * @param {string} event Event name
      * @param {any} data Any amount of arguments of any type, as long as it is compatible with `MessagePort`'s `postMessage`
      */
-    emit(event: string, ...data: any): void {
-        this.port.postMessage([event, data]);
+    emit(event: string, ...data: any[]): void {
+        this.port.postMessage([event, data], (data.length == 1 && data[0] instanceof MessagePort) ? [data[0]] : []);
     }
 
     /**
@@ -65,7 +65,7 @@ export class MessageChannelEventEmitter {
      * @param {string} event Event name
      * @param {function} listener Listener function (can accept arbitrary number of arguments)
      */
-    addEventListener(event: string, listener: (...data: any) => any): void {
+    addEventListener(event: string, listener: (...data: any[]) => any): void {
         if (this.listeners.has(event)) this.listeners.get(event)!.add(listener);
         else this.listeners.set(event, new Set([listener]));
     }
@@ -75,7 +75,7 @@ export class MessageChannelEventEmitter {
      * @param {function} listener Listener function (must be the same function passed to {@link addEventListener})
      * @returns {boolean} `true` if the listener function was removed, otherwise `false`
      */
-    removeEventListener(event: string, listener: (...data: any) => any): boolean {
+    removeEventListener(event: string, listener: (...data: any[]) => any): boolean {
         const listeners = this.listeners.get(event);
         const stat = listeners?.delete(listener) == true;
         if (listeners?.size == 0) this.listeners.delete(event);
@@ -98,7 +98,7 @@ export class MessageChannelEventEmitter {
      * @param {function} listener Listener function (can accept arbitrary number of arguments)
      * @alias {@link addEventListener}
      */
-    on(event: string, listener: (...data: any) => any): void {
+    on(event: string, listener: (...data: any[]) => any): void {
         this.addEventListener(event, listener);
     }
     /**
@@ -108,7 +108,7 @@ export class MessageChannelEventEmitter {
      * @returns {boolean} `true` if the listener function was removed, otherwise `false`
      * @alias {@link removeEventListener}
      */
-    off(event: string, listener: (...data: any) => any): boolean {
+    off(event: string, listener: (...data: any[]) => any): boolean {
         return this.removeEventListener(event, listener);
     }
     /**
@@ -116,8 +116,8 @@ export class MessageChannelEventEmitter {
      * @param {string} event Event name
      * @param {function} listener Listener function (can accept arbitrary number of arguments)
      */
-    once(event: string, listener: (...data: any) => any): void {
-        const l = (...data: any) => {
+    once(event: string, listener: (...data: any[]) => any): void {
+        const l = (...data: any[]) => {
             listener(...data);
             this.removeEventListener(event, l);
         };
@@ -128,7 +128,7 @@ export class MessageChannelEventEmitter {
      * @param {string} event Event name
      * @returns {((...data: any) => any)[] | undefined} Array of listener functions or undefined if no listeners
      */
-    getEventListeners(event: string): ((...data: any) => any)[] | undefined {
+    getEventListeners(event: string): ((...data: any[]) => any)[] | undefined {
         const listeners = this.listeners.get(event)?.values();
         return listeners !== undefined ? Array.from(listeners) : undefined;
     }

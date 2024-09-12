@@ -1,7 +1,6 @@
-import { log } from 'console';
 import { isMainThread, parentPort } from 'worker_threads';
 
-import config from '@/common/config';
+import config from '@/config';
 import { MessageChannelLoggerSender } from '@/common/log';
 import { MessageChannelEventEmitter } from '@/common/messageChannelEvents';
 
@@ -9,7 +8,7 @@ if (isMainThread || parentPort == null) throw new Error('Game host must be run i
 
 // set up communications using two MessageChannels
 const parentMessenger = new MessageChannelEventEmitter(parentPort);
-const { port2: remoteLoggingPort, port1: loggingPort } = new MessageChannel();
+const { port1: loggingPort, port2: remoteLoggingPort } = new MessageChannel();
 const logger = new MessageChannelLoggerSender(loggingPort);
 parentMessenger.emit('logger', remoteLoggingPort);
 
@@ -17,8 +16,16 @@ parentMessenger.on('error', (err: Error) => {
     logger.handleError('MessagePort error:', err);
 });
 
+Promise.all([
+    logger.ready
+]).then(() => {
+    parentMessenger.emit('ready');
+    logger.debug('Host started and game ready');
+});
+
 const stopServer = async (code: number) => {
     logger.info('Stopping game host...');
+    await logger.destroy();
     process.exit(code);
 };
 
@@ -35,4 +42,7 @@ const handleUncaughtError = (err: any, origin: string | Promise<unknown>) => {
 process.on('uncaughtException', handleUncaughtError);
 process.on('unhandledRejection', handleUncaughtError);
 
-console.log(config.path, config.scriptPath)
+parentMessenger.on('shutdown', () => {
+    if (config.debugMode) logger.debug('External exit command recieved', true);
+    stopServer(0);
+});

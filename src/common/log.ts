@@ -1,3 +1,4 @@
+import config from '@/config';
 import fs from 'fs';
 import { resolve as pathResolve } from 'path';
 import { MessagePort } from 'worker_threads';
@@ -136,7 +137,7 @@ export class FileLogger implements Logger {
             this.fatal('' + error);
             const stack: { stack?: string } = {};
             Error.captureStackTrace(stack);
-            if (stack.stack) this.error(stack.stack);
+            if (stack.stack) this.fatal(stack.stack);
         }
     }
 
@@ -218,9 +219,13 @@ export class NamedLogger implements Logger {
  */
 export class MessageChannelLoggerReciever {
     readonly logger: Logger;
-    readonly selfLogger: NamedLogger;
+    private readonly selfLogger: NamedLogger;
+    private readonly remoteLogger: NamedLogger;
     readonly port: MessagePort;
+    readonly ready: Promise<void>;
+    private conn: boolean = false;
     private closed: boolean = false;
+    private readonly closeListeners: Set<(expected: boolean) => any> = new Set();
 
     /**
      * @param {Logger} logger Logger to write to
@@ -229,8 +234,16 @@ export class MessageChannelLoggerReciever {
     constructor(logger: Logger, port: MessagePort) {
         this.logger = logger;
         this.selfLogger = new NamedLogger(this.logger, 'MessagePortLoggerReciever');
+        this.remoteLogger = new NamedLogger(this.logger, 'MessagePortLoggerSender');
         this.port = port;
-        this.port.on('message', (message: [number, any]) => {
+        this.port.on('message', (message: [number, any] | string) => {
+            if (message === 'MessageChannelLogger-CLOSE') {
+                this.port.postMessage('MessageChannelLogger-CLOSE-ACK');
+                this.closed = true;
+                this.port.close();
+                if (config.debugMode) this.selfLogger.debug('Remote initiated logger close', true);
+                return;
+            }
             if (!Array.isArray(message) || message.length != 2 || typeof message[0] != 'number' || !Array.isArray(message[1])) return;
             switch (message[0]) {
                 case 0: this.logger.debug(message[1][0], message[1][1]); break;
@@ -240,8 +253,8 @@ export class MessageChannelLoggerReciever {
                 case 4: this.logger.fatal(message[1][0], message[1][1]); break;
                 case 5: this.logger.handleError(message[1][0], message[1][1]); break;
                 case 6: this.logger.handleFatal(message[1][0], message[1][1]); break;
-                case 7: this.closed = true; this.port.close(); break;
-                case 8: this.selfLogger.handleError('MessagePort error on remote:', message[1]); break;
+                case 7: this.remoteLogger.handleError('MessagePort error on remote:', message[1]); break;
+                case 8: this.remoteLogger.debug(message[1][0]); break;
                 default: this.selfLogger.error(`Unexpected method "${message[0]}" (payload ${message[1]})`);
             }
         });
@@ -249,9 +262,37 @@ export class MessageChannelLoggerReciever {
             this.selfLogger.handleError('MessagePort error:', err);
         });
         this.port.on('close', () => {
+            this.closeListeners.forEach((cb) => { try { cb(this.closed) } catch { } });
             if (this.closed) return;
+            this.closed = true;
             this.selfLogger.warn('The MessageChannel was unexpectedly closed');
         });
+        this.ready = new Promise<void>((resolve) => {
+            const handshakeListener = (data: any) => {
+                if (data === 'MessageChannelLogger-HANDSHAKE') {
+                    this.conn = true;
+                    resolve();
+                    this.port.postMessage('MessageChannelLogger-HANDSHAKE-ACK');
+                    this.port.off('message', handshakeListener);
+                    if (config.debugMode) this.selfLogger.debug('Handshake recieved', true);
+                }
+            };
+            this.port.on('message', handshakeListener);
+        });
+    }
+
+    /**
+     * If there is a MessageChannelLoggerSender on the other MessagePort.
+     */
+    get connected() {
+        return this.conn;
+    }
+
+    onclosed(cb: (expected: boolean) => any): void {
+        this.closeListeners.add(cb);
+    }
+    offclosed(cb: (expected: boolean) => any): boolean {
+        return this.closeListeners.delete(cb);
     }
 }
 
@@ -263,7 +304,10 @@ export class MessageChannelLoggerReciever {
  */
 export class MessageChannelLoggerSender implements Logger {
     readonly port: MessagePort;
+    readonly ready: Promise<void>;
+    private conn: boolean = false;
     private closed: boolean = false;
+    private readonly closeListeners: Set<(expected: boolean) => any> = new Set();
 
     /**
      * @param {MessagePort} port Corresponding other `MessagePort` of the `MessagePort` being used by a `MessageChannelLoggerReciever`
@@ -271,14 +315,38 @@ export class MessageChannelLoggerSender implements Logger {
     constructor(port: MessagePort) {
         this.port = port;
         this.port.on('messageerror', (err) => {
-            this.port.postMessage([8, err]);
+            this.port.postMessage([7, err]);
             console.error('MessagePortLoggerSender error:');
             console.error(err);
         });
         this.port.on('close', () => {
+            this.closeListeners.forEach((cb) => { try { cb(this.closed) } catch { } });
             if (this.closed) return;
+            this.closed = true;
             console.warn('MessagePortLoggerSender MessageChannel was unexpectedly closed');
         });
+        this.ready = new Promise<void>((resolve) => {
+            const handshakePing = setInterval(() => {
+                this.port.postMessage('MessageChannelLogger-HANDSHAKE');
+            }, 500);
+            const handshakeListener = (data: any) => {
+                if (data === 'MessageChannelLogger-HANDSHAKE-ACK') {
+                    this.conn = true;
+                    resolve();
+                    clearInterval(handshakePing);
+                    this.port.off('message', handshakeListener);
+                    if (config.debugMode) this.selfDebug('Handshake acknowledged');
+                }
+            };
+            this.port.on('message', handshakeListener);
+        });
+    }
+
+    /**
+     * If there is a MessageChannelLoggerReceiver on the other MessagePort.
+     */
+    get connected() {
+        return this.conn;
     }
 
     timestamp(): string {
@@ -296,34 +364,55 @@ export class MessageChannelLoggerSender implements Logger {
         return `${time.getFullYear()}-${month}-${day} [${hour}:${minute}:${second}]`;
     }
     debug(text: string, logOnly?: boolean): void {
-        this.port.postMessage([0, text, logOnly]);
+        this.port.postMessage([0, [text, logOnly]]);
     }
     info(text: string, logOnly?: boolean): void {
-        this.port.postMessage([1, text, logOnly]);
+        this.port.postMessage([1, [text, logOnly]]);
     }
     warn(text: string, logOnly?: boolean): void {
-        this.port.postMessage([2, text, logOnly]);
+        this.port.postMessage([2, [text, logOnly]]);
     }
     error(text: string, logOnly?: boolean): void {
-        this.port.postMessage([3, text, logOnly]);
+        this.port.postMessage([3, [text, logOnly]]);
     }
     fatal(text: string, logOnly?: boolean): void {
-        this.port.postMessage([4, text, logOnly]);
+        this.port.postMessage([4, [text, logOnly]]);
     }
     handleError(message: string, error: any): void {
-        this.port.postMessage([5, message, error]);
+        this.port.postMessage([5, [message, error]]);
     }
     handleFatal(message: string, error: any): void {
-        this.port.postMessage([6, message, error]);
+        this.port.postMessage([6, [message, error]]);
+    }
+
+    private selfDebug(text: string): void {
+        this.port.postMessage([8, [text]]);
     }
 
     /**
      * Closes the `MessageChannel` instead of closing the logging session.
      * `destroy()` must be called on the {@link MessageChannelLoggerReciever} to close the logging session.
      */
-    async destroy() {
+    async destroy(): Promise<void> {
         this.closed = true;
-        this.port.postMessage([7]);
+        this.port.postMessage('MessageChannelLogger-CLOSE');
+        await new Promise<void>((resolve) => {
+            const shutdownListener = (m: any) => {
+                if (m === 'MessageChannelLogger-CLOSE-ACK') {
+                    resolve();
+                    this.port.off('message', shutdownListener);
+                }
+            };
+            this.port.on('message', shutdownListener);
+        });
+        this.port.close();
+    }
+
+    onclosed(cb: (expected: boolean) => any): void {
+        this.closeListeners.add(cb);
+    }
+    offclosed(cb: (expected: boolean) => any): boolean {
+        return this.closeListeners.delete(cb);
     }
 }
 

@@ -1,17 +1,21 @@
 import { isMainThread } from 'worker_threads';
 if (!isMainThread) throw new Error('Hub must be run in main thread!');
 
+const start = performance.now();
+
 import fs from 'fs';
 import path from 'path';
 
 import { configDotenv } from 'dotenv';
-configDotenv({ path: path.resolve(__dirname, '../config/.env') });
-import config from '@/common/config';
+configDotenv({ path: path.resolve(__dirname, '../../config/.env') });
+import config from '@/config';
 
 // verify environment variables exist
-if (['CONFIG_PATH', ...(!config.useFileDatabase ? ['DATABASE_URL'] : [])].some((v) => process.env[v] == undefined)) {
+if (['CONFIG_PATH', 'RECAPTCHA_SECRET', ...(!config.useFileDatabase ? ['DATABASE_URL'] : [])].some((v) => process.env[v] == undefined)) {
     throw new Error('Missing environment variables. Make sure your environment is set up correctly!');
 }
+
+const configLoadTime = performance.now() - start;
 
 // start server
 import { FileLogger } from '../common/log';
@@ -20,6 +24,7 @@ logger.info('Starting server...');
 logger.debug('BASE_PATH: ' + config.path);
 logger.debug('CONFIG_PATH: ' + config.configPath);
 logger.debug('Current config:\n' + JSON.stringify(config, null, 4), true);
+if (config.debugMode) logger.info('Extra debug logging is enabled (disable this if this is not a development environment!)');
 
 // set up networking
 import express from 'express';
@@ -28,6 +33,7 @@ import https from 'https';
 import { rateLimit } from 'express-rate-limit';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+const allowedOrigins = [/https?:\/\/localhost:[0-9]{1,5}/]; // /https:\/\/(?:.+\.)*wwppc\.tech/
 const app = express();
 const server = fs.existsSync(path.resolve(config.configPath, 'cert.pem')) ? https.createServer({
     key: fs.readFileSync(path.resolve(config.configPath, 'cert-key.pem')),
@@ -42,7 +48,7 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 app.use(cors({
-    origin: [/https?:\/\/localhost:[0-9]{1,5}/], // /https:\/\/(?:.+\.)*wwppc\.tech/
+    origin: allowedOrigins,
     credentials: true,
     allowedHeaders: 'Content-Type,Cookie'
 }));
@@ -67,7 +73,8 @@ if (config.debugMode) logger.info('Creating Socket.IO server');
 const io = new SocketIOServer(server, {
     path: '/game-socketio',
     cors: {
-        origin: '*', methods: ['GET', 'POST'],
+        origin: allowedOrigins,
+        methods: ['GET', 'POST'],
         credentials: true
     }
 });
@@ -79,18 +86,23 @@ addClientRoutes(app, database, hostManager, logger);
 // default 404 everything
 app.use('/*', (req, res) => res.sendStatus(404));
 
+const instantiationTime = performance.now() - start;
+
 // listen
 Promise.all([
     database.connect(),
 ]).then(() => {
+    const startTime = performance.now() - start;
     server.listen(config.port);
-    logger.info(`Listening to port ${config.port}`);
+    if (config.debugMode) logger.debug(`Config load: ${configLoadTime}ms; Module instantiation: ${instantiationTime}ms`);
+    logger.info(`Server started in ${startTime}ms, listening to port ${config.port}`);
 });
 
 const stopServer = async (code: number) => {
     logger.info('Stopping server...');
+    const start = performance.now();
     let actuallyStop = () => {
-        logger.info('[!] Forced server close! Skipped waiting for shutdown! [!]');
+        logger.warn('[!] Forced server close! Skipped waiting for shutdown! [!]');
         process.exit(code);
     };
     process.on('SIGTERM', actuallyStop);
@@ -98,8 +110,10 @@ const stopServer = async (code: number) => {
     process.on('SIGINT', actuallyStop);
     io.close();
     await Promise.all([
-        database.disconnect()
+        database.disconnect(),
+        ...hostManager.getGames(false).map((host) => host.end())
     ]);
+    logger.info(`Server stopped, took ${performance.now() - start}ms`);
     logger.destroy();
     process.exit(code);
 };
