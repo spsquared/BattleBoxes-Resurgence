@@ -8,6 +8,7 @@ import { MessageChannelEventEmitter } from '@/common/messageChannelEvents';
 import config from '@/config';
 
 import { AccountOpResult, Database } from '../common/database';
+import { reverse_enum } from '@/common/util';
 
 /**
  * Game room manager that creates `GameHost` instances for each room created.
@@ -92,6 +93,7 @@ export class GameHostRunner {
     private readonly db: Database;
     private readonly logger: NamedLogger;
     private readonly hostLogger: NamedLogger;
+    private readonly players: Map<string, SocketIOSocket> = new Map();
     hostUser: string;
     readonly options: GameHostOptions;
     private running: boolean = false;
@@ -168,7 +170,10 @@ export class GameHostRunner {
     async addPlayer(username: string): Promise<string | AccountOpResult> {
         this.logger.info(`Adding ${username} to game`, true);
         const userData = await this.db.getAccountData(username);
-        if (typeof userData != 'object') return userData;
+        if (typeof userData != 'object') {
+            this.logger.error('Could not add player due to database error: ' + reverse_enum(AccountOpResult, userData))
+            return userData;
+        }
         await this.readyPromise;
         this.workerMessenger.emit('playerJoin', userData);
         const authCode = randomSecureUUID();
@@ -178,12 +183,27 @@ export class GameHostRunner {
     }
 
     /**
-     * Kick a player from the game, returning if a player was kicked.
-     * @param {stirng} username Username of player
-     * @returns {Promise<boolean>} If a player was kicked
+     * Remove a player from the game (with optional reason), returning if a player was removed.
+     * @param {string} username Username of player
+     * @param {string | undefined} reason Reason (usually for kicks)
+     * @returns {Promise<boolean>} If a player was removed
      */
-    async kickPlayer(username: string): Promise<boolean> {
-        throw new Error('Not implemented');
+    async removePlayer(username: string, reason?: string): Promise<boolean> {
+        const socket = this.players.get(username);
+        if (socket == undefined) return false;
+        if (reason != undefined) this.logger.info(`${username} removed from game for ${reason}`);
+        else if (config.debugMode) this.logger.debug(`${username} left the game`);
+        this.players.delete(username);
+        socket.emit('leave');
+        socket.disconnect();
+        // tell the thread the player disconnected
+        // save player data (initiated by thread)
+        // end game if no players (also done by thread)
+        return true;
+    }
+
+    get playerCount() {
+        return this.players.size;
     }
 
     private async initServerEvents() {
@@ -192,13 +212,42 @@ export class GameHostRunner {
 
     private async handlePlayerConnection(s: SocketIOSocket) {
         const socket = s;
-        // wait for authentication
-        // set up connections
-        let username = 'unknown?';
+        if (socket.handshake.auth == undefined || typeof socket.handshake.auth.token != 'string') {
+            this.logger.warn(`'Socket.IO connection with no authentication from ${socket.handshake.address} was blocked`);
+            socket.disconnect();
+            return;
+        }
+        const username = this.authCodes.get(socket.handshake.auth.token);
+        this.authCodes.delete(socket.handshake.auth.token);
+        if (username == undefined) {
+            this.logger.warn(`'Socket.IO connection with bad authentication from ${socket.handshake.address} was blocked`);
+            socket.disconnect();
+            return;
+        }
+        if (this.players.has(username)) {
+            this.logger.warn('Duplicate username attempted to join game: ' + username);
+            socket.disconnect();
+        }
+        this.players.set(username, socket);
+        if (config.debugMode) this.logger.debug(`${username} joined the game`);
+
         socket.on('error', () => {
             this.logger.warn(`${username} disconnected for "error" event`);
             socket.disconnect();
         });
+        socket.on('disconnect', () => {
+            console.log('disconnect')
+            this.removePlayer(username);
+        })
+        socket.emit('join');
+        // tell the thread the player connected
+    }
+
+    sendBroadcastChatMessage(message: ChatMessageSection | ChatMessageSection[]) {
+
+    }
+    sendChatMessage(source: string, text: string) {
+        this.sendBroadcastChatMessage({ text: 'buh' })
     }
 
     /**
@@ -249,4 +298,13 @@ export interface GameHostOptions {
     readonly aiPlayers: number
     /**Allow players to join through a public join list */
     readonly public: boolean
+}
+
+export interface ChatMessageSection {
+    text: string,
+    style?: {
+        color?: string,
+        fontWeight?: 'normal' | 'bold',
+        fontStyle?: 'normal' | 'italic'
+    }
 }

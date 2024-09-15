@@ -172,18 +172,19 @@ export const addClientRoutes = (expapp: Express, db: Database, hosts: GameHostMa
         const games = hostManager.getGames(true).map((host) => ({
             id: host.id,
             host: host.hostUser,
-            options: host.options
+            options: host.options,
+            playerCount: host.playerCount
         }));
         res.json(games);
     });
-    app.post('/games/joinGame/:gameId', authentication, async (req, res) => {
+    app.post('/games/joinGame/:gameId', authentication, bodyParser.json(), captchaCheck, async (req, res) => {
         const hostRunner = hostManager.getGame(req.params.gameId);
         if (hostRunner === undefined) res.sendStatus(404);
         else if (authTokens.tokenExists(req.cookies.authToken)) {
             const username = authTokens.getTokenData(req.cookies.authToken)!;
             const authCode = await hostRunner.addPlayer(username);
-            if (authCode !== null) res.json(authCode);
-            else res.sendStatus(500);
+            if (typeof authCode != 'string') res.sendStatus(accountOpToHttpCode(authCode));
+            else res.json({ id: hostRunner.id, authCode: authCode });
             logger.info(`${username} joined game ${hostRunner.id}`);
         } else res.sendStatus(500);
     });

@@ -226,34 +226,34 @@ export interface PsqlDatabaseConstructorParams {
  * PostgreSQL database connection.
  */
 export class PsqlDatabase implements Database {
-    readonly #connectPromise: Promise<void>;
+    private readonly connectPromise: Promise<void>;
 
-    readonly #db: Client;
+    private readonly db: Client;
     readonly logger: NamedLogger;
 
     constructor({ uri, sslCert, logger }: PsqlDatabaseConstructorParams) {
         const startTime = performance.now();
         this.logger = new NamedLogger(logger, 'PsqlDatabase');
-        this.#connectPromise = new Promise(() => undefined);
-        this.#db = new Client({
+        this.connectPromise = new Promise(() => undefined);
+        this.db = new Client({
             connectionString: uri,
             application_name: 'BattleBoxes Main Server',
             ssl: sslCert != undefined ? { ca: sslCert } : { rejectUnauthorized: false }
         });
-        this.#connectPromise = this.#db.connect().catch((err) => {
+        this.connectPromise = this.db.connect().catch((err) => {
             this.logger.handleFatal('Could not connect to database:', err);
-            this.logger.fatal('Host: ' + this.#db.host);
+            this.logger.fatal('Host: ' + this.db.host);
             this.logger.destroy();
             process.exit(1);
         });
-        this.#connectPromise.then(() => {
+        this.connectPromise.then(() => {
             this.logger.info('Database connected');
             if (config.debugMode) {
-                this.logger.debug(`Connected to ${this.#db.host}`);
+                this.logger.debug(`Connected to ${this.db.host}`);
                 this.logger.debug(`Connection time: ${performance.now() - startTime}ms`);
             }
         });
-        this.#db.on('error', (err) => {
+        this.db.on('error', (err) => {
             this.logger.handleFatal('Fatal database error:', err);
             this.logger.destroy();
             process.exit(1);
@@ -261,17 +261,17 @@ export class PsqlDatabase implements Database {
     }
 
     async connect() {
-        await this.#connectPromise;
+        await this.connectPromise;
     }
     async disconnect() {
-        await this.#db.end();
+        await this.db.end();
         this.logger.info('Disconnected');
     }
 
     async getAccountList(): Promise<string[] | null> {
         const startTime = performance.now();
         try {
-            const data = await this.#db.query('SELECT users.username FROM users');
+            const data = await this.db.query('SELECT users.username FROM users');
             if (data.rows.length > 0) return data.rows.map((r) => r.username);
             return null;
         } catch (err) {
@@ -285,9 +285,9 @@ export class PsqlDatabase implements Database {
         const startTime = performance.now();
         try {
             const encryptedPassword = await bcrypt.hash(password, salt);
-            const data = await this.#db.query('SELECT username FROM users WHERE username=$1', [username]);
+            const data = await this.db.query('SELECT username FROM users WHERE username=$1', [username]);
             if (data.rows.length > 0) return AccountOpResult.ALREADY_EXISTS;
-            else await this.#db.query('INSERT INTO users (username, password, xp, trackers, achievements) VALUES ($1, $2, $3, $4, $5)', [username, encryptedPassword, 0, '{}', []]);
+            else await this.db.query('INSERT INTO users (username, password, xp, trackers, achievements) VALUES ($1, $2, $3, $4, $5)', [username, encryptedPassword, 0, '{}', []]);
             this.logger.info(`Created account "${username}"`, true);
             return AccountOpResult.SUCCESS;
         } catch (err) {
@@ -300,7 +300,7 @@ export class PsqlDatabase implements Database {
     async checkAccount(username: string, password: string): Promise<AccountOpResult.SUCCESS | AccountOpResult.NOT_EXISTS | AccountOpResult.INCORRECT_CREDENTIALS | AccountOpResult.ERROR> {
         const startTime = performance.now();
         try {
-            const data = await this.#db.query('SELECT password FROM users WHERE username=$1', [username]);
+            const data = await this.db.query('SELECT password FROM users WHERE username=$1', [username]);
             if (data.rows.length > 0) {
                 if (await bcrypt.compare(password, data.rows[0].password)) return AccountOpResult.SUCCESS;
                 return AccountOpResult.INCORRECT_CREDENTIALS;
@@ -316,7 +316,7 @@ export class PsqlDatabase implements Database {
     async getAccountData(username: string): Promise<AccountData | AccountOpResult.NOT_EXISTS | AccountOpResult.ERROR> {
         const startTime = performance.now();
         try {
-            const data = await this.#db.query('SELECT username, xp, trackers, achievements FROM users WHERE username=$1', [username]);
+            const data = await this.db.query('SELECT username, xp, trackers, achievements FROM users WHERE username=$1', [username]);
             if (data.rows.length > 0) {
                 const raw = data.rows[0];
                 return {
@@ -348,7 +348,7 @@ export class PsqlDatabase implements Database {
     async updateAccountData(userData: AccountData): Promise<AccountOpResult.SUCCESS | AccountOpResult.NOT_EXISTS | AccountOpResult.ERROR> {
         const startTime = performance.now();
         try {
-            const res = await this.#db.query(
+            const res = await this.db.query(
                 'UPDATE users SET xp=$2, trackers=$3, achievements=$4 WHERE username=$1 RETURNING username', [
                 userData.username, userData.xp, JSON.stringify(userData.trackers), userData.achievements
             ]);
@@ -367,7 +367,7 @@ export class PsqlDatabase implements Database {
             const res = await this.checkAccount(username, password);
             if (res != AccountOpResult.SUCCESS) return res;
             const encryptedPassword = await bcrypt.hash(newPassword, salt);
-            await this.#db.query('UPDATE users SET password=$2 WHERE username=$1', [username, encryptedPassword]);
+            await this.db.query('UPDATE users SET password=$2 WHERE username=$1', [username, encryptedPassword]);
             this.logger.info(`Reset password for "${username}"`, true);
             return AccountOpResult.SUCCESS;
         } catch (err) {
@@ -382,7 +382,7 @@ export class PsqlDatabase implements Database {
         try {
             const res = await this.checkAccount(username, password);
             if (res != AccountOpResult.SUCCESS) return res;
-            await this.#db.query('DELETE FROM users WHERE username=$1', [username]);
+            await this.db.query('DELETE FROM users WHERE username=$1', [username]);
             this.logger.info(`Deleted account ${username}`, true);
             return AccountOpResult.SUCCESS;
         } catch (err) {
