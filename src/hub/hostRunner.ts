@@ -7,7 +7,7 @@ import Logger, { MessageChannelLoggerReciever, NamedLogger } from '@/common/log'
 import { MessageChannelEventEmitter } from '@/common/messageChannelEvents';
 import config from '@/config';
 
-import { AccountOpResult, Database } from '../common/database';
+import { AccountData, AccountOpResult, Database } from '../common/database';
 import { reverse_enum } from '@/common/util';
 
 /**
@@ -99,7 +99,9 @@ export class GameHostRunner {
     private running: boolean = false;
     private ended: boolean = false;
     private readonly readyPromise: Promise<void>;
-    private readonly endListeners: Set<() => any> = new Set();
+    private readonly endListeners: Set<(error?: boolean) => any> = new Set();
+
+    private static readonly existingPlayers: Set<string> = new Set();
 
     private readonly authCodes: Map<string, string> = new Map();
 
@@ -132,6 +134,7 @@ export class GameHostRunner {
         // if this ever goes, there is an uh oh crash
         this.workerMessenger.on('workererror', (err: Error) => {
             this.logger.handleFatal('Host thread terminated: ', err);
+            this.handleEnd(true);
         });
         this.workerMessenger.on('error', (err: Error) => {
             this.logger.handleError('MessagePort error:', err);
@@ -139,6 +142,7 @@ export class GameHostRunner {
         this.workerMessenger.on('close', (code: number) => {
             if (code == 0) this.logger.info('Host thread exited');
             else this.logger.fatal('Host thread exited with non-zero exit code ' + code);
+            this.handleEnd(code != 0);
         });
         // set up logger and ready synchronizer promise (apparently Promise.all() returns void array???)
         this.readyPromise = new Promise((resolve) => Promise.all<void>([
@@ -194,11 +198,10 @@ export class GameHostRunner {
         if (reason != undefined) this.logger.info(`${username} removed from game for ${reason}`);
         else if (config.debugMode) this.logger.debug(`${username} left the game`);
         this.players.delete(username);
+        GameHostRunner.existingPlayers.delete(username);
         socket.emit('leave');
         socket.disconnect();
-        // tell the thread the player disconnected
-        // save player data (initiated by thread)
-        // end game if no players (also done by thread)
+        this.workerMessenger.emit('playerLeave', username, reason);
         return true;
     }
 
@@ -206,11 +209,25 @@ export class GameHostRunner {
         return this.players.size;
     }
 
-    private async initServerEvents() {
-        // set up the events for the server, like tick and stuff
+    /**
+     * Initializes events for communication with the Worker thread and global Socket.IO.
+     * Should only ever be called once!
+     */
+    private async initServerEvents(): Promise<void> {
+        this.workerMessenger.on('tick', (tickDat) => this.io.emit('tick', tickDat));
+        this.workerMessenger.on('kick', (username: string, reason: string) => this.removePlayer(username, reason));
+        this.workerMessenger.on('playerData', async (data: AccountData) => {
+            const res = await this.db.updateAccountData(data);
+            if (res != AccountOpResult.SUCCESS) this.logger.error('Failed to save player data: ' + reverse_enum(AccountOpResult, res));
+        });
+        this.workerMessenger.on('broadcast', (message: ChatMessageSection | ChatMessageSection[]) => this.sendBroadcastChatMessage(message));
     }
 
-    private async handlePlayerConnection(s: SocketIOSocket) {
+    /**
+     * Handles incoming Socket.IO connection by a client. Does authentication and adds listeners.
+     * @param s New Socket.IO connection
+     */
+    private async handlePlayerConnection(s: SocketIOSocket): Promise<void> {
         const socket = s;
         if (socket.handshake.auth == undefined || typeof socket.handshake.auth.token != 'string') {
             this.logger.warn(`'Socket.IO connection with no authentication from ${socket.handshake.address} was blocked`);
@@ -225,22 +242,52 @@ export class GameHostRunner {
             return;
         }
         if (this.players.has(username)) {
-            this.logger.warn('Duplicate username attempted to join game: ' + username);
+            this.logger.warn('Duplicate player attempted to join game: ' + username);
             socket.disconnect();
+            return;
+        }
+        if (GameHostRunner.existingPlayers.has(username)) {
+            this.logger.warn('Player attempted to join game while in another game: ' + username);
+            socket.disconnect();
+            return;
         }
         this.players.set(username, socket);
         if (config.debugMode) this.logger.debug(`${username} joined the game`);
 
+        // not this time!!!
         socket.on('error', () => {
             this.logger.warn(`${username} disconnected for "error" event`);
             socket.disconnect();
         });
+
+        const sendEvents: string[] = [];
+        const sendEventHandlers: (() => void)[] = [];
+        const receiveEvents: string[] = ['tick'];
+        const receiveEventHandlers: (() => void)[] = [];
+        for (const ev of sendEvents) {
+            const handle = (...data: any[]) => socket.emit(ev, ...data);
+            sendEventHandlers.push(handle);
+            this.workerMessenger.on(`${username}/${ev}`, handle);
+        }
+        for (const ev of receiveEvents) {
+            const map = `${username}/${ev}`;
+            const handle = (...data: any[]) => this.workerMessenger.emit(map, ...data);
+            receiveEventHandlers.push(handle);
+            socket.on(ev, handle);
+        }
+        // removing listeners
         socket.on('disconnect', () => {
-            console.log('disconnect')
             this.removePlayer(username);
-        })
+            for (let i in sendEvents) {
+                this.workerMessenger.off(`${username}/${sendEvents[i]}`, sendEventHandlers[i]);
+            }
+            for (let i in receiveEvents) {
+                socket.off(receiveEvents[i], receiveEventHandlers[i]);
+            }
+        });
+
+        // the thread already knows the player joined because addPlayer was called
         socket.emit('join');
-        // tell the thread the player connected
     }
 
     sendBroadcastChatMessage(message: ChatMessageSection | ChatMessageSection[]) {
@@ -271,7 +318,11 @@ export class GameHostRunner {
         return this.ended;
     }
 
-    onended(cb: () => any): void {
+    /**
+     * Add a listener for the game end.
+     * @param cb Callback function with `error` parameter (if an error caused the game to end)
+     */
+    onended(cb: (error?: boolean) => any): void {
         this.endListeners.add(cb);
     }
 
@@ -285,9 +336,18 @@ export class GameHostRunner {
             this.workerMessenger.emit('shutdown');
             this.workerMessenger.on('close', () => resolve());
         });
+        this.handleEnd(false);
         if (config.debugMode) this.logger.debug(`Host shutdown took ${performance.now() - start}ms`, true);
+    }
+
+    /**
+     * Shuts down the game.
+     * @param error If an error caused the shutdown
+     */
+    private handleEnd(error: boolean) {
+        this.io.disconnectSockets();
         GameHostRunner.gameIds.delete(this.id);
-        this.endListeners.forEach((cb) => { try { cb() } catch { } });
+        this.endListeners.forEach((cb) => { try { cb(error) } catch (err) { this.logger.handleError('Error in end listener:', err); } });
     }
 }
 

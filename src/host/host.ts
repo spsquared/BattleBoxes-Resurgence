@@ -1,20 +1,24 @@
 import { isMainThread, parentPort } from 'worker_threads';
 
-import config from '@/config';
 import { MessageChannelLoggerSender } from '@/common/log';
 import { MessageChannelEventEmitter } from '@/common/messageChannelEvents';
+import config from '@/config';
+
 
 if (isMainThread || parentPort == null) throw new Error('Game host must be run in worker thread!');
 
 // set up communications using two MessageChannels
-const parentMessenger = new MessageChannelEventEmitter(parentPort);
+export const parentMessenger = new MessageChannelEventEmitter(parentPort);
 const { port1: loggingPort, port2: remoteLoggingPort } = new MessageChannel();
-const logger = new MessageChannelLoggerSender(loggingPort);
+export const logger = new MessageChannelLoggerSender(loggingPort);
 parentMessenger.emit('logger', remoteLoggingPort);
 
 parentMessenger.on('error', (err: Error) => {
     logger.handleError('MessagePort error:', err);
 });
+
+// create game (everything is static since singletons are annoying)
+import { Game } from './game';
 
 Promise.all([
     logger.ready
@@ -23,8 +27,12 @@ Promise.all([
     logger.debug('Host started and game ready');
 });
 
-const stopServer = async (code: number) => {
+let stopping = false;
+export const stopServer = async (code: number) => {
+    if (stopping) return;
+    stopping = true;
     logger.info('Stopping game host...');
+    await Game.stop('Server closed');
     await logger.destroy();
     process.exit(code);
 };

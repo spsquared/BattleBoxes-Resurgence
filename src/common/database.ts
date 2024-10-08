@@ -170,7 +170,8 @@ export class FileDatabase implements Database {
                 damageAbsorbed: 0,
                 lootboxesOpened: 0
             },
-            achievements: []
+            achievements: [],
+            infractions: []
         });
         return AccountOpResult.SUCCESS;
     }
@@ -190,8 +191,9 @@ export class FileDatabase implements Database {
         // object moment
         const existing = this.data.accounts.get(userData.username)!;
         existing.xp = userData.xp;
-        existing.trackers = userData.trackers;
-        existing.achievements = userData.achievements;
+        existing.trackers = structuredClone(userData.trackers);
+        existing.achievements = userData.achievements.slice();
+        existing.infractions = structuredClone(userData.infractions);
         return AccountOpResult.SUCCESS;
     }
     async changeAccountPassword(username: string, password: string, newPassword: string): Promise<AccountOpResult.SUCCESS | AccountOpResult.NOT_EXISTS | AccountOpResult.INCORRECT_CREDENTIALS> {
@@ -287,7 +289,7 @@ export class PsqlDatabase implements Database {
             const encryptedPassword = await bcrypt.hash(password, salt);
             const data = await this.db.query('SELECT username FROM users WHERE username=$1', [username]);
             if (data.rows.length > 0) return AccountOpResult.ALREADY_EXISTS;
-            else await this.db.query('INSERT INTO users (username, password, xp, trackers, achievements) VALUES ($1, $2, $3, $4, $5)', [username, encryptedPassword, 0, '{}', []]);
+            else await this.db.query('INSERT INTO users (username, password, xp, trackers, achievements, infractions) VALUES ($1, $2, $3, $4, $5, $6)', [username, encryptedPassword, 0, '{}', [], []]);
             this.logger.info(`Created account "${username}"`, true);
             return AccountOpResult.SUCCESS;
         } catch (err) {
@@ -316,7 +318,7 @@ export class PsqlDatabase implements Database {
     async getAccountData(username: string): Promise<AccountData | AccountOpResult.NOT_EXISTS | AccountOpResult.ERROR> {
         const startTime = performance.now();
         try {
-            const data = await this.db.query('SELECT username, xp, trackers, achievements FROM users WHERE username=$1', [username]);
+            const data = await this.db.query('SELECT username, xp, trackers, achievements, infractions FROM users WHERE username=$1', [username]);
             if (data.rows.length > 0) {
                 const raw = data.rows[0];
                 return {
@@ -334,7 +336,8 @@ export class PsqlDatabase implements Database {
                         damageAbsorbed: raw.trackers.damageAbsorbed ?? 0,
                         lootboxesOpened: raw.trackers.lootboxesOpened ?? 0
                     },
-                    achievements: raw.achievements
+                    achievements: raw.achievements,
+                    infractions: raw.infractions
                 };
             }
             return AccountOpResult.NOT_EXISTS;
@@ -349,8 +352,8 @@ export class PsqlDatabase implements Database {
         const startTime = performance.now();
         try {
             const res = await this.db.query(
-                'UPDATE users SET xp=$2, trackers=$3, achievements=$4 WHERE username=$1 RETURNING username', [
-                userData.username, userData.xp, JSON.stringify(userData.trackers), userData.achievements
+                'UPDATE users SET xp=$2, trackers=$3, achievements=$4, infractions=$5 WHERE username=$1 RETURNING username', [
+                userData.username, userData.xp, JSON.stringify(userData.trackers), userData.achievements, userData.infractions
             ]);
             if (res.rows.length == 0) return AccountOpResult.NOT_EXISTS;
             return AccountOpResult.SUCCESS;
@@ -425,7 +428,8 @@ export interface AccountData {
         damageAbsorbed: number
         lootboxesOpened: number
     },
-    achievements: string[]
+    achievements: string[],
+    infractions: [string, number][]
 }
 
 interface FileDatabaseAccount extends AccountData {

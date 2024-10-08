@@ -1,18 +1,21 @@
 // handles the authentication and then hands over to HostManager instance when joining games
 
 import bodyParser from 'body-parser';
-import { Express, RequestHandler } from 'express';
+import express, { Express, RequestHandler } from 'express';
+import { readdirSync } from 'fs';
+import { resolve as pathResolve } from 'path';
 
-import config from '@/config';
+import { validateStructure } from '@/common/inputValidation';
 import Logger, { NamedLogger } from '@/common/log';
+import config from '@/config';
 
-import { SessionTokenHandler } from './cryptoUtil';
 import { AccountOpResult, Database } from '../common/database';
+import { SessionTokenHandler } from './cryptoUtil';
 import { GameHostManager } from './hostRunner';
 import { validateRecaptcha } from './recaptcha';
 
 /**
- * Ravioli function to segment client networking (loggin in, joining games, viewing accounts, etc.)
+ * Ravioli function to segment client networking (logging in, joining games, game resources, etc.)
  */
 export const addClientRoutes = (expapp: Express, db: Database, hosts: GameHostManager, extLog: Logger) => {
     const app = expapp;
@@ -138,35 +141,6 @@ export const addClientRoutes = (expapp: Express, db: Database, hosts: GameHostMa
     });
     setInterval(() => recentSignups.clear(), 30000);
 
-    // spaghetti verification
-    const formatsMatch = (user: any, expected: any) => {
-        // hopefully not susceptible to DOS attack?
-        try {
-            const stack: [any, any, string | number, string | number][] = [];
-            for (let i in expected) stack.push([expected, user, i, i]);
-            while (stack.length > 0) {
-                const curr = stack.pop()!;
-                const expectVal = curr[0][curr[2]];
-                const userVal = curr[1][curr[3]];
-                if (typeof expectVal == 'object' && expectVal != null) {
-                    // check all the properties within
-                    for (let i in expectVal) stack.push([expectVal, userVal, i, i]);
-                } else if (Array.isArray(expectVal)) {
-                    // check the format of each index of userVal matches the first index of expectVal
-                    if (!Array.isArray(userVal)) return false;
-                    for (let i in userVal) stack.push([expectVal, userVal, 0, i]);
-                } else {
-                    // check that the types are the same
-                    if (typeof expectVal != typeof userVal) return false;
-                }
-            }
-            return true;
-        } catch (err) {
-            logger.handleError('Error while validating input:', err);
-            return false;
-        }
-    };
-
     // creating/joining games
     app.get('/games/gameList', authentication, (req, res) => {
         const games = hostManager.getGames(true).map((host) => ({
@@ -178,7 +152,7 @@ export const addClientRoutes = (expapp: Express, db: Database, hosts: GameHostMa
         res.json(games);
     });
     app.post('/games/joinGame/:gameId', authentication, bodyParser.json(), captchaCheck, async (req, res) => {
-        const hostRunner = hostManager.getGame(req.params.gameId);
+        const hostRunner = hostManager.getGame(req.params.gameId.toUpperCase());
         if (hostRunner === undefined) res.sendStatus(404);
         else if (authTokens.tokenExists(req.cookies.authToken)) {
             const username = authTokens.getTokenData(req.cookies.authToken)!;
@@ -189,7 +163,7 @@ export const addClientRoutes = (expapp: Express, db: Database, hosts: GameHostMa
         } else res.sendStatus(500);
     });
     app.post('/games/createGame', authentication, bodyParser.json(), captchaCheck, async (req, res) => {
-        if (req.body == null || !formatsMatch(req.body, {
+        if (req.body == null || !validateStructure(req.body, {
             maxPlayers: 0,
             aiPlayers: 0,
             public: true,
@@ -206,4 +180,10 @@ export const addClientRoutes = (expapp: Express, db: Database, hosts: GameHostMa
             logger.info(`${username} created game ${hostRunner.id}`);
         } else res.sendStatus(500);
     });
+
+    // game resources
+    const mapList = readdirSync(pathResolve(config.gameSourcePath, 'maps/')).join();
+    if (config.debugMode) logger.debug('Maps found: ' + mapList);
+    app.get('/resources/mapList', (req, res) => res.status(200).send(mapList).end());
+    app.use('/resources', express.static(config.gameSourcePath));
 };
