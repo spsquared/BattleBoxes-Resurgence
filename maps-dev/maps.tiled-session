@@ -3,7 +3,7 @@
         "height": 4300,
         "width": 2
     },
-    "activeFile": "lobby.tmx",
+    "activeFile": "map-main.tsx",
     "expandedProjectPaths": [
         "."
     ],
@@ -25,28 +25,33 @@
             "scaleInEditor": 16
         },
         "lobby.tmx": {
-            "scale": 5.5,
-            "selectedLayer": 3,
+            "scale": 4,
+            "selectedLayer": 1,
             "viewCenter": {
-                "x": 176.0909090909091,
-                "y": 21.36363636363636
+                "x": 343.625,
+                "y": 93.375
             }
         },
         "map-main.tsx": {
             "scaleInDock": 5.5,
-            "scaleInEditor": 16
+            "scaleInEditor": 11
         }
     },
-    "last.imagePath": "C:/Users/jacki/My Drive/BattleBoxes-Resurgence/maps-dev",
+    "last.exportedFilePath": "C:/Users/jacki/My Drive/BattleBoxes-Resurgence/game-resources",
+    "last.imagePath": "C:/Users/jacki/My Drive/BattleBoxes-Resurgence/game-resources/textures",
+    "lastUsedTilesetExportFilter": "JSON tileset files (*.tsj *.json)",
     "map.height": 24,
+    "map.lastUsedExportFilter": "JSON map files (*.tmj *.json)",
     "map.lastUsedFormat": "tmx",
     "map.tileHeight": 8,
     "map.tileWidth": 8,
     "map.width": 48,
     "openFiles": [
-        "lobby.tmx"
+        "lobby.tmx",
+        "map-main.tsx"
     ],
     "project": "maps.tiled-project",
+    "property.type": "float",
     "recentFiles": [
         "lobby.tmx",
         "map-main.tsx",

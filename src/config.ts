@@ -1,27 +1,10 @@
 import fs from 'fs';
 import path from 'path';
+import { isMainThread, workerData } from 'worker_threads';
 
-process.env.BASE_PATH ??= path.resolve(__dirname, '../');
-process.env.SCRIPT_PATH ??= __dirname;
-process.env.GAME_SRC_PATH ??= path.resolve(process.env.BASE_PATH, 'game-resources/');
-process.env.CONFIG_PATH ??= path.resolve(process.env.BASE_PATH, 'config/');
-const certPath = path.resolve(process.env.CONFIG_PATH, 'db-cert.pem');
-if (fs.existsSync(certPath)) process.env.DATABASE_CERT = fs.readFileSync(certPath, 'utf8');
-const configPath = path.resolve(process.env.CONFIG_PATH, 'config.json');
-function loadConfig() {
-    try {
-        if (!fs.existsSync(configPath)) fs.writeFileSync(configPath, '{}', 'utf8');
-        return JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    } catch {
-        return {};
-    }
-}
-const fileConfig = loadConfig();
-/**
- * Global configuration, loaded from `config.json` in the config folder.
- * If any field is empty in `config.json`, it is filled in with the default.
- */
-const config: {
+// weirdness is for workers - workers will inherit config from main thread
+
+type ServerConfig = {
     /**TCP port for the HTTP/HTTPS server to listen to (default: 9000) */
     readonly port: string
     /**Ratelimiting - how many new Socket.IO connections can be made from any given IP address in 1 second before clients are kicked (default: 5) */
@@ -48,7 +31,40 @@ const config: {
     readonly gameSourcePath: string
     /**Directory to write logs to - server will also create a `logs` directory there (default: `../`) */
     readonly logPath: string
-} = {
+}
+
+const getConfig = (): any => {
+    if (isMainThread) {
+        process.env.BASE_PATH ??= path.resolve(__dirname, '../');
+        process.env.SCRIPT_PATH ??= __dirname;
+        process.env.GAME_SRC_PATH ??= path.resolve(process.env.BASE_PATH, 'game-resources/');
+        process.env.CONFIG_PATH ??= path.resolve(process.env.BASE_PATH, 'config/');
+        const certPath = path.resolve(process.env.CONFIG_PATH, 'db-cert.pem');
+        if (fs.existsSync(certPath)) process.env.DATABASE_CERT = fs.readFileSync(certPath, 'utf8');
+        const configPath = path.resolve(process.env.CONFIG_PATH, 'config.json');
+        try {
+            if (!fs.existsSync(configPath)) fs.writeFileSync(configPath, '{}', 'utf8');
+            return JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        } catch {
+            return {};
+        }
+    } else {
+        process.env.BASE_PATH ??= (workerData as ServerConfig).path;
+        process.env.SCRIPT_PATH ??= (workerData as ServerConfig).scriptPath;
+        process.env.GAME_SRC_PATH ??= (workerData as ServerConfig).gameSourcePath;
+        process.env.CONFIG_PATH ??= (workerData as ServerConfig).configPath;
+        return workerData as ServerConfig;
+    }
+};
+
+const fileConfig = getConfig();
+/**
+ * Global configuration, loaded from `config.json` in the config folder.
+ * If any field is empty in `config.json`, it is filled in with the default.
+ * 
+ * In worker threads, this is supplied by the global `workerData` from the host server.
+ */
+const config: ServerConfig = isMainThread ? {
     port: process.env.PORT ?? fileConfig.port ?? 9000,
     maxConnectPerSecond: fileConfig.maxConnectPerSecond ?? 5,
     maxSignupPerMinute: fileConfig.maxSignupPerMinute ?? 1,
@@ -62,18 +78,22 @@ const config: {
     gameSourcePath: fileConfig.gameSourcePath ?? process.env.GAME_SRC_PATH,
     configPath: process.env.CONFIG_PATH,
     logPath: process.env.LOG_PATH ?? fileConfig.logPath ?? path.resolve(__dirname, '../logs/'),
-};
-process.env.GAME_SRC_PATH = config.gameSourcePath;
-// when writing back to file, prevent environment variables and argument overrides also overwriting file configurations
-const config2: any = structuredClone(config);
-config2.port = fileConfig.port ?? 2000;
-config2.debugMode = fileConfig.debugMode ?? false;
-delete config2.path;
-delete config2.configPath;
-config2.gameSourcePath = fileConfig.gameSourcePath;
-config2.logPath = fileConfig.logPath;
-try {
-    fs.writeFileSync(configPath, JSON.stringify(config2, null, 4));
-} catch { }
+} : fileConfig;
+
+if (isMainThread) {
+    process.env.GAME_SRC_PATH = config.gameSourcePath;
+    // when writing back to file, prevent environment variables and argument overrides also overwriting file configurations
+    const config2: any = structuredClone(config);
+    config2.port = fileConfig.port ?? 2000;
+    config2.debugMode = fileConfig.debugMode ?? false;
+    delete config2.path;
+    delete config2.scriptPath;
+    delete config2.configPath;
+    config2.gameSourcePath = fileConfig.gameSourcePath;
+    config2.logPath = fileConfig.logPath;
+    try {
+        fs.writeFileSync(path.resolve(process.env.CONFIG_PATH!, 'config.json'), JSON.stringify(config2, null, 4));
+    } catch { }
+}
 
 export default config;

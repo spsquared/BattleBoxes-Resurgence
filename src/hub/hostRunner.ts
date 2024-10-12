@@ -128,7 +128,8 @@ export class GameHostRunner {
         this.logger.info('Creating host thread');
         if (config.debugMode) this.logger.debug(`config: ${JSON.stringify(options)}; host: ${this.hostUser}`, true);
         this.worker = new Worker(pathResolve(config.scriptPath, 'host/host.js'), {
-            name: this.id
+            name: this.id,
+            workerData: config
         });
         this.workerMessenger = new MessageChannelEventEmitter(this.worker);
         // if this ever goes, there is an uh oh crash
@@ -145,22 +146,28 @@ export class GameHostRunner {
             this.handleEnd(code != 0);
         });
         // set up logger and ready synchronizer promise (apparently Promise.all() returns void array???)
-        this.readyPromise = new Promise((resolve) => Promise.all<void>([
+        this.readyPromise = new Promise((resolve) => Promise.race([
+            Promise.all<void>([
+                new Promise<void>((resolve) => {
+                    this.workerMessenger.once('ready', () => {
+                        resolve();
+                        this.logger.info('Host thread online');
+                        if (config.debugMode) this.logger.debug(`Host startup took ${performance.now() - start}ms`, true);
+                    });
+                }),
+                new Promise<void>((resolve) => {
+                    this.workerMessenger.once('logger', async (loggingPort: MessagePort) => {
+                        const newLogger = new MessageChannelLoggerReciever(this.hostLogger, loggingPort);
+                        await newLogger.ready;
+                        resolve();
+                    });
+                })
+            ]).then(() => resolve()),
             new Promise<void>((resolve) => {
-                this.workerMessenger.once('ready', () => {
-                    resolve();
-                    this.logger.info('Host thread online');
-                    if (config.debugMode) this.logger.debug(`Host startup took ${performance.now() - start}ms`, true);
-                });
-            }),
-            new Promise<void>((resolve) => {
-                this.workerMessenger.once('logger', async (loggingPort: MessagePort) => {
-                    const newLogger = new MessageChannelLoggerReciever(this.hostLogger, loggingPort);
-                    await newLogger.ready;
-                    resolve();
-                });
+                this.workerMessenger.on('workererror', () => resolve());
+                this.workerMessenger.on('close', () => resolve());
             })
-        ]).then(() => resolve()));
+        ]));
         // socket.io handoff
         this.io.on('connection', (socket) => this.handlePlayerConnection(socket));
         this.initServerEvents();
@@ -216,6 +223,9 @@ export class GameHostRunner {
     private async initServerEvents(): Promise<void> {
         this.workerMessenger.on('tick', (tickDat) => this.io.emit('tick', tickDat));
         this.workerMessenger.on('kick', (username: string, reason: string) => this.removePlayer(username, reason));
+        this.workerMessenger.on('initPlayerPhysics', ([username, baseProperties]: [string, any]) => {
+            this.io.to(username).emit('initPlayerPhysics', [baseProperties]);
+        })
         this.workerMessenger.on('playerData', async (data: AccountData) => {
             const res = await this.db.updateAccountData(data);
             if (res != AccountOpResult.SUCCESS) this.logger.error('Failed to save player data: ' + reverse_enum(AccountOpResult, res));
@@ -251,6 +261,7 @@ export class GameHostRunner {
             socket.disconnect();
             return;
         }
+        socket.join(username);
         this.players.set(username, socket);
         if (config.debugMode) this.logger.debug(`${username} joined the game`);
 

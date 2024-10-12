@@ -182,7 +182,7 @@ export const addClientRoutes = (expapp: Express, db: Database, hosts: GameHostMa
     });
 
     // game resources
-    const mapList = readdirSync(pathResolve(config.gameSourcePath, 'maps/')).join();
+    const mapList = readdirSync(pathResolve(config.gameSourcePath, 'maps/')).join(', ');
     if (config.debugMode) logger.debug('Maps found: ' + mapList);
     app.get('/resources/mapList', (req, res) => res.status(200).send(mapList).end());
     app.use('/resources', express.static(config.gameSourcePath));

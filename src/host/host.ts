@@ -4,7 +4,6 @@ import { MessageChannelLoggerSender } from '@/common/log';
 import { MessageChannelEventEmitter } from '@/common/messageChannelEvents';
 import config from '@/config';
 
-
 if (isMainThread || parentPort == null) throw new Error('Game host must be run in worker thread!');
 
 // set up communications using two MessageChannels

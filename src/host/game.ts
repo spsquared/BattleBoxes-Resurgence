@@ -3,6 +3,7 @@ import { Player } from './entities/player';
 import { logger, parentMessenger, stopServer } from './host';
 import { NamedLogger } from '@/common/log';
 import { Entity } from './entities/entity';
+import GameMap from './map';
 
 /**
  * Handles core game logic like points, rounds, and ticking.
@@ -11,6 +12,8 @@ export class Game {
     static readonly logger: NamedLogger = new NamedLogger(logger, 'Game');
     private static running: boolean = false;
     private static runStart: number = 0;
+    /**Lobby mode enables respawning and disables statistic trackers */
+    private static lobbyMode: boolean = true;
 
     private static readonly perfMetrics: {
         tpsTimes: number[]
@@ -22,6 +25,9 @@ export class Game {
             tickTimes: []
         };
 
+    /**
+     * Starts ticking, will not end until {@link stop} is called.
+     */
     static async startTickLoop(): Promise<void> {
         while (this.running) {
             const start = performance.now();
@@ -39,19 +45,22 @@ export class Game {
         }
     }
 
+    /**
+     * Ticks and sends update packet to clients.
+     */
     private static lastTpsWarning = 0;
     private static tick(): void {
-        const tps = this.metrics.tps;
-        if (tps.avg < 30 && performance.now() > this.runStart + 1000) {
+        const metrics = this.metrics;
+        if (metrics.tps.avg < 30 && performance.now() > this.runStart + 2000) {
             if (this.lastTpsWarning < performance.now() - 60000) {
-                this.logger.warn(`Low tickrate! Is the server overloaded? Current performance metrics:\n${JSON.stringify(this.metrics, null, 2)}`);
+                this.logger.warn(`Low tickrate! Is the server overloaded? Current performance metrics:\n${JSON.stringify(metrics, null, 2)}`);
             }
             this.lastTpsWarning = performance.now();
         }
         Entity.nextTick();
         parentMessenger.emit('tick', {
             tick: Entity.tick,
-            tps: tps.curr,
+            tps: metrics.tps.curr,
             players: Player.nextTick()
         });
     }
@@ -63,6 +72,7 @@ export class Game {
     static addPlayer(user: AccountData): void {
         new Player(user);
         this.logger.debug(`Added ${user.username} to game`);
+        parentMessenger.emit('initPlayerPhysics', [user.username, Player.baseProperties]);
     }
 
     /**
@@ -115,8 +125,8 @@ export class Game {
             tps: {
                 curr: this.perfMetrics.tpsTimes.length,
                 avg: this.perfMetrics.tpsHist.reduce((p, c) => p + c, 0) / this.perfMetrics.tpsHist.length,
-                max: Math.max(...this.perfMetrics.tpsTimes),
-                min: Math.min(...this.perfMetrics.tpsTimes)
+                max: Math.max(...this.perfMetrics.tpsHist),
+                min: Math.min(...this.perfMetrics.tpsHist)
             },
             timings: {
                 avg: this.perfMetrics.tickTimes.reduce((p, c) => p + c, 0) / this.perfMetrics.tickTimes.length,
@@ -130,5 +140,6 @@ export class Game {
 parentMessenger.addEventListener('playerJoin', (user: AccountData) => Game.addPlayer(user));
 parentMessenger.addEventListener('playerLeave', (username: string, reason?: string) => Game.removePlayer(username, reason));
 
-// TEMP
-Game.start();
+// load maps immediately and start ticking
+GameMap.reloadMaps().then(() => GameMap.current = GameMap.maps.get('lobby'));
+Game.startTickLoop();

@@ -1,7 +1,9 @@
+import GameMap from "../map";
+
 /**
  * The generic `Entity` class that the physics engine will run on. Has basic movement and collisions.
  */
-export abstract class Entity {
+export abstract class Entity implements Collidable {
     /**Global tick counter that increments for every tick */
     static tick: number = 0;
 
@@ -23,17 +25,19 @@ export abstract class Entity {
     boundingHeight: number = NaN;
     halfBoundingWidth: number = NaN;
     halfBoundingHeight: number = NaN;
+    /**List of vertices going clockwise that make up a convex polygon to define the collision shape of the entity */
     readonly vertices: Point[] = [];
+    /**Friction coefficients of contact sides (along the axes), where zero is no friction or no contact */
     readonly contactEdges: {
-        left: boolean
-        right: boolean
-        top: boolean
-        bottom: boolean
+        left: number
+        right: number
+        top: number
+        bottom: number
     } = {
-            left: false,
-            right: false,
-            top: false,
-            bottom: false
+            left: 0,
+            right: 0,
+            top: 0,
+            bottom: 0
         };
     hasCollision: boolean = true;
 
@@ -73,11 +77,12 @@ export abstract class Entity {
      * Note that translations are calculated first, then rotations.
      */
     nextPosition(): void {
+        this.calculateCollisionInfo();
         const startx = this.x;
         const starty = this.y;
         const steps = Math.ceil(Math.max(Math.abs(this.vx), Math.abs(this.vy)));
-        const xStep = this.vx / steps;
-        const yStep = this.vy / steps;
+        const dx = this.vx / steps;
+        const dy = this.vy / steps;
         const pos = {
             x: this.x,
             y: this.y,
@@ -87,8 +92,8 @@ export abstract class Entity {
         for (let step = 1; step <= steps; step++) {
             pos.lx = pos.x;
             pos.ly = pos.y;
-            pos.x = this.x + xStep * step;
-            pos.y = this.y + yStep * step;
+            pos.x = this.x + dx * step;
+            pos.y = this.y + dy * step;
             if (this.collidesWithMap(pos.x, pos.y)) {
                 if (this.collidesWithMap(pos.x, pos.ly)) {
                     if (this.collidesWithMap(pos.lx, pos.y)) {
@@ -120,21 +125,49 @@ export abstract class Entity {
 
     /**
      * If the entity would intersect with any part of the map when placed at the coordinates (`x`, `y`).
+     * If so, returns the friction coefficient of the colliding segment.
+     * **Note:** Surfaces with zero friction will appear to be non-collidable!
      * @param x X coordinate to test
      * @param y Y coordinate to test
-     * @returns If the entity would collide
+     * @returns Friction coefficient of contacted map, or 0 if no contact
      */
-    collidesWithMap(x: number, y: number): boolean {
-        return false;
+    collidesWithMap(x: number, y: number): number {
+        if (GameMap.current === undefined) return 0;
+        const sx = Math.max(Math.floor(x - this.halfBoundingWidth), 0);
+        const ex = Math.min(Math.ceil(x + this.halfBoundingWidth), GameMap.current.width - 1);
+        const sy = Math.max(Math.floor(y + this.halfBoundingHeight), 0);
+        const ey = Math.min(Math.ceil(y + this.halfBoundingHeight), GameMap.current.height - 1);
+        const dx = x - this.x;
+        const dy = y - this.y;
+        const vertices = this.vertices.map((p) => ({ x: p.x + dx, y: p.y + dy }));
+        for (let cy = sy; cy <= ey; cy++) {
+            for (let cx = sx; cx <= ex; cx++) {
+                for (const col of GameMap.current.collisionGrid[cy][cx]) {
+                    if (Math.abs(x - col.x) <= this.halfBoundingWidth + col.halfBoundingWidth && Math.abs(y - col.y) <= this.halfBoundingHeight + col.halfBoundingHeight) {
+                        for (const p of this.vertices) {
+                            if (col.vertices.every((q, i) => this.isWithin(p, q, col.vertices[(i + 1) % col.vertices.length]))) {
+                                return col.friction;
+                            }
+                        }
+                        for (const p of col.vertices) {
+                            if (vertices.every((q, i) => this.isWithin(p, q, vertices[(i + 1) % vertices.length]))) {
+                                return col.friction;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return 0;
     }
 
     /**
-     * If the entity is currently intersecting with another entity.
+     * If the entity is currently intersecting with another entity or other {@link Collidable} object.
      * Uses a convex hull-like algorithm for intersections of arbitrary convex polygons.
      * @param that Other entity to check collision with
      * @returns If the entities are colliding
      */
-    collidesWithEntity(that: Entity): boolean {
+    collidesWithEntity(that: Collidable): boolean {
         if (Math.abs(this.x - that.x) > this.halfBoundingWidth + that.halfBoundingWidth || Math.abs(this.y - that.y) > this.halfBoundingHeight + that.halfBoundingHeight) {
             return false;
         }
@@ -184,7 +217,7 @@ export abstract class Entity {
      * @param that Other point or entity
      * @returns Maximum distance along an axis to the point
      */
-    axisDistanceTo(that: Entity): number {
+    axisDistanceTo(that: Point): number {
         return Math.max(Math.abs(this.x - that.x), Math.abs(this.y - that.y));
     }
 
@@ -194,8 +227,8 @@ export abstract class Entity {
      * @param that Other point or entity
      * @returns Euclidean distance to the point
      */
-    gridDistanceTo(that: Entity): number {
-        return Math.sqrt((this.gridx - that.gridx))
+    gridDistanceTo(that: Entity | Point): number {
+        return Math.sqrt((this.gridx - ((that as Entity).gridx ?? that.x)) ** 2 + (this.gridy - ((that as Entity).gridy ?? that.y)) ** 2);
     }
 
     /**
@@ -205,8 +238,8 @@ export abstract class Entity {
      * @param that Other point or entity
      * @returns Euclidean distance to the point
      */
-    gridAxisDistanceTo(that: Entity): number {
-        return Math.max(Math.abs(this.gridx - that.gridx), Math.abs(this.gridy - that.gridy));
+    gridAxisDistanceTo(that: Entity | Point): number {
+        return Math.max(Math.abs(this.gridx - ((that as Entity).gridx ?? that.x)), Math.abs(this.gridy - ((that as Entity).gridy ?? that.y)));
     }
 
     /**
@@ -242,6 +275,9 @@ export abstract class Entity {
         };
     }
 
+    /**
+     * Removes the entity from the world.
+     */
     remove(): void { }
 
     /**
@@ -254,6 +290,9 @@ export abstract class Entity {
     }
 }
 
+/**
+ * All data necessary to create one entity on the client, fetched each tick.
+ */
 export interface EntityTickData {
     readonly id: number
     readonly x: number
@@ -264,7 +303,21 @@ export interface EntityTickData {
     readonly va: number
 }
 
+/**
+ * A 2D point.
+ */
 export interface Point {
     x: number,
     y: number
+}
+
+/**
+ * A convex polygon with a location and bounding box that can be checked for intersection with any `Entity`.
+ */
+export interface Collidable {
+    x: number
+    y: number
+    halfBoundingWidth: number
+    halfBoundingHeight: number
+    readonly vertices: Point[]
 }

@@ -11,7 +11,7 @@ configDotenv({ path: path.resolve(__dirname, '../../config/.env') });
 import config from '@/config';
 
 // verify environment variables exist
-if (['CONFIG_PATH', 'RECAPTCHA_SECRET', ...(!config.useFileDatabase ? ['DATABASE_URL'] : [])].some((v) => process.env[v] == undefined)) {
+if (['CONFIG_PATH', 'GAME_SRC_PATH', 'RECAPTCHA_SECRET', ...(!config.useFileDatabase ? ['DATABASE_URL'] : [])].some((v) => process.env[v] == undefined)) {
     throw new Error('Missing environment variables. Make sure your environment is set up correctly!');
 }
 
@@ -22,6 +22,7 @@ import { FileLogger } from '../common/log';
 const logger = new FileLogger(config.logPath);
 logger.info('Starting server...');
 logger.debug('BASE_PATH: ' + config.path);
+logger.debug('GAME_SRC_PATH: ' + config.gameSourcePath);
 logger.debug('CONFIG_PATH: ' + config.configPath);
 logger.debug('Current config:\n' + JSON.stringify(config, null, 4), true);
 if (config.debugMode) logger.info('Extra debug logging is enabled (disable this if this is not a development environment!)');
@@ -33,7 +34,7 @@ import https from 'https';
 import { rateLimit } from 'express-rate-limit';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
-const allowedOrigins = [/https?:\/\/localhost:[0-9]{1,5}/]; // /https:\/\/(?:.+\.)*wwppc\.tech/
+const allowedOrigins = [/https?:\/\/localhost:[0-9]{1,5}/]; // /https:\/\/(?:.+\.)*domain\.com/
 const app = express();
 const server = fs.existsSync(path.resolve(config.configPath, 'cert.pem')) ? https.createServer({
     key: fs.readFileSync(path.resolve(config.configPath, 'cert-key.pem')),
