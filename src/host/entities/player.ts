@@ -39,14 +39,14 @@ export class Player extends Entity {
         };
 
     static readonly baseProperties: Readonly<Player['properties']> = {
-        // gravity: 0.2,
-        gravity: 0,
-        movePower: 1,
-        jumpPower: 2,
-        airMovePower: 0.5,
-        drag: 0.99,
-        friction: 0.95,
-        grip: 0.2
+        gravity: 0.1,
+        movePower: 0.1,
+        jumpPower: 1,
+        airMovePower: 0.05,
+        drag: 0.85,
+        airDrag: 0.9,
+        wallDrag: 0.5,
+        grip: 0.8
     };
     readonly properties: {
         gravity: number
@@ -54,7 +54,8 @@ export class Player extends Entity {
         jumpPower: number
         airMovePower: number
         drag: number
-        friction: number
+        airDrag: number
+        wallDrag: number
         grip: number
     } = {
             gravity: Player.baseProperties.gravity,
@@ -62,7 +63,8 @@ export class Player extends Entity {
             jumpPower: Player.baseProperties.jumpPower,
             airMovePower: Player.baseProperties.airMovePower,
             drag: Player.baseProperties.drag,
-            friction: Player.baseProperties.friction,
+            airDrag: Player.baseProperties.airDrag,
+            wallDrag: Player.baseProperties.wallDrag,
             grip: Player.baseProperties.grip
         };
     readonly modifiers: Map<number, { modifier: Modifiers, length: number, activated: boolean }> = new Map();
@@ -113,7 +115,8 @@ export class Player extends Entity {
      * Validates the physics tick by running it on the same conditions
      * @param packet Client tick packet
      */
-    physicsTick(packet: PlayerTickInput): void {
+    physicsTick(p: PlayerTickInput): void {
+        const packet = p;
         // update tick
         this.clientPhysics.tick = packet.tick;
         // tick simulation - should be identical to client (but will override client anyway)
@@ -140,29 +143,38 @@ export class Player extends Entity {
             }
         }
         // movement
-        // grip is multiplier for player movements, lower values make the player "float" like on ice
-        // friction is multiplier for player friction, lower values make the player "stick" to surfaces
-        const onWall = (this.contactEdges.left || this.contactEdges.right) != 0;
-        const onGround = (this.contactEdges.bottom || onWall) != 0;
-        // apply friction from contact surfaces
-        // friction is friction of player * friction of ground
-        this.vx *= this.properties.friction * (this.contactEdges.top || 1) * (this.contactEdges.bottom || 1);
-        this.vy *= this.properties.friction * (this.contactEdges.left || 1) * (this.contactEdges.right || 1);
-        // apply air drag
-        this.vx *= this.properties.drag;
-        this.vy *= this.properties.drag;
+        //   drag is exponential decay base, always active when contacting map, friction becomes exponent
+        //   grip is multiplier for intentional player movements, friction becomes coefficient
+        // apply friction drag from contact surfaces (drag)
+        //   drag is raised to exponent of friction * grip
+        this.vx *= Math.pow(this.properties.drag, this.contactEdges.top + this.contactEdges.bottom);
+        this.vy *= Math.pow(this.properties.drag, this.contactEdges.left + this.contactEdges.right);
+        // apply air drag (airDrag)
+        this.vx *= this.properties.airDrag;
+        this.vy *= this.properties.airDrag;
         // apply velocity from inputs
-        // on ground (bottom contact): full movement speed, jumps (power * grip * wall friction)
-        // on walls (side contacts): full movement speed, but wall jumps too (power * grip * wall friction); wall slide drag is e^(wall friction * grip)
-        // on ceiling: oof
-        // in air (no contacts): air multiplier, no jumps
-        // some shenanigans with js boolean operators used here, so it looks weird
-        const groundGrip = this.properties.grip * (!onGround ? this.properties.airMovePower : (onWall ? -1 : 1));
-        const wallGrip = this.properties.grip * (this.contactEdges.left || 1) * (this.contactEdges.right || 1);
-        if ((this.contactEdges.left && packet.inputs.left) || (this.contactEdges.right && packet.inputs.right)) this.vy *= Math.pow(2, -wallGrip);
-        this.vx += ((packet.inputs.left ? -1 : 0) + (packet.inputs.right ? 1 : 0)) * this.properties.movePower * groundGrip;
-        if (this.contactEdges.bottom && packet.inputs.up) this.vy += this.properties.jumpPower * wallGrip;
-        // apply gravity using correct angle
+        //   in air: air power movement, no jumps
+        //   on ground (bottom): full movement (power * grip * friction), normal jumps (power)
+        //   on walls (moving into side contacts): override normal movement
+        //     persistent drag from wallslides (wallDrag) - drag ^ (friction * grip)
+        //     up or down input activates wall jump - up jumps with move while down just moves
+        //     wall jump jump power (power * grip * friction)
+        //     wall jump move power (power * grip * friction)
+        const moveInput = ((packet.inputs.right ? 1 : 0) - (packet.inputs.left ? 1 : 0));
+        if (this.contactEdges.left * moveInput < 0 || this.contactEdges.right * moveInput > 0) {
+            const friction = this.contactEdges.left + this.contactEdges.right;
+            this.vy *= Math.pow(this.properties.wallDrag, friction);
+            if (packet.inputs.up || packet.inputs.down) {
+                this.vx += -moveInput * this.properties.movePower * this.properties.grip * friction;
+                if (packet.inputs.up) this.vy += this.properties.jumpPower * this.properties.grip * friction;
+            }
+        } else if (this.contactEdges.bottom != 0) {
+            this.vx += moveInput * this.properties.movePower * this.properties.grip * this.contactEdges.bottom;
+            if (packet.inputs.up) this.vy += this.properties.jumpPower;
+        } else {
+            this.vx += moveInput * this.properties.airMovePower;
+        }
+        // apply gravity with angle
         this.vy -= this.properties.gravity * this.cosVal;
         this.vx += this.properties.gravity * this.sinVal;
         // move to next position
@@ -211,7 +223,8 @@ export class Player extends Entity {
         this.properties.jumpPower = Player.baseProperties.jumpPower;
         this.properties.airMovePower = Player.baseProperties.airMovePower;
         this.properties.drag = Player.baseProperties.drag;
-        this.properties.friction = Player.baseProperties.friction;
+        this.properties.airDrag = Player.baseProperties.airDrag;
+        this.properties.wallDrag = Player.baseProperties.wallDrag;
         this.properties.grip = Player.baseProperties.grip;
     }
 

@@ -31,5 +31,8 @@ config.json
 *.crt
 *.key
 
-# local database
+# Local database
 database.db
+
+# Tiled local data
+*.tiled-session

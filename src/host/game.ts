@@ -54,11 +54,21 @@ export class Game {
     private static lastTpsWarning = 0;
     private static tick(): void {
         const metrics = this.metrics;
-        if (metrics.tps.avg < 30 && performance.now() > this.runStart + 2000) {
-            if (this.lastTpsWarning < performance.now() - 60000) {
-                this.logger.warn(`Low tickrate! Is the server overloaded? Current performance metrics:\n${JSON.stringify(metrics, null, 2)}`);
+        if (performance.now() > this.runStart + 2000) {
+            if (metrics.tps.avg < 30) {
+                if (this.lastTpsWarning < performance.now() - 60000) {
+                    this.logger.warn(`Low tickrate! Is the server overloaded? TPS: ${metrics.tps.curr}/${metrics.tps.avg} Jitter: ${metrics.tps.jitter}`);
+                    this.logger.warn(`  Current performance metrics:\n${JSON.stringify(metrics, null, 2)}`, true);
+                }
+                this.lastTpsWarning = performance.now();
             }
-            this.lastTpsWarning = performance.now();
+            if (metrics.tps.jitter > 5) {
+                if (this.lastTpsWarning < performance.now() - 60000) {
+                    this.logger.warn(`Unstable tickrate! Is the server overloaded? TPS: ${metrics.tps.curr}/${metrics.tps.avg} Jitter: ${metrics.tps.jitter}`);
+                    this.logger.warn(`  Current performance metrics:\n${JSON.stringify(metrics, null, 2)}`, true);
+                }
+                this.lastTpsWarning = performance.now();
+            }
         }
         Entity.nextTick();
         parentMessenger.emit('tick', {
@@ -89,8 +99,14 @@ export class Game {
             player.physicsTick(packet);
         };
         parentMessenger.on(player.username + '/tick', onPhysicsTick);
+        // ping
+        const pingName = player.username + '/pong';
+        const ping = (t: number) => parentMessenger.emit(pingName, t);
+        parentMessenger.on(player.username + '/ping', ping);
+        // prevent resource leak by removing listeners
         player.onRemoved(() => {
             parentMessenger.off(player.username + '/tick', onPhysicsTick);
+            parentMessenger.off(player.username + '/ping', ping);
         });
     }
 
@@ -143,7 +159,8 @@ export class Game {
                 curr: this.perfMetrics.tpsTimes.length,
                 avg: this.perfMetrics.tpsHist.reduce((p, c) => p + c, 0) / this.perfMetrics.tpsHist.length,
                 max: Math.max(...this.perfMetrics.tpsHist),
-                min: Math.min(...this.perfMetrics.tpsHist)
+                min: Math.min(...this.perfMetrics.tpsHist),
+                jitter: Math.max(...this.perfMetrics.tpsHist) - Math.min(...this.perfMetrics.tpsHist)
             },
             timings: {
                 avg: this.perfMetrics.tickTimes.reduce((p, c) => p + c, 0) / this.perfMetrics.tickTimes.length,

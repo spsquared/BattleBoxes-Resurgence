@@ -93,6 +93,8 @@ export abstract class Entity implements Collidable {
         const starty = this.y;
         const steps = Math.max(Math.abs(this.vx), Math.abs(this.vy)) * Entity.physicsResolution;
         const step = 1 / steps;
+        const dx = this.vx / steps;
+        const dy = this.vy / steps;
         const pos = {
             x: this.x,
             y: this.y,
@@ -102,8 +104,8 @@ export abstract class Entity implements Collidable {
         for (let i = step; i <= 1; i += step) {
             pos.lx = pos.x;
             pos.ly = pos.y;
-            pos.x = this.x + this.vx * i;
-            pos.y = this.y + this.vy * i;
+            pos.x += dx;
+            pos.y += dy;
             if (this.collidesWithMap(pos.x, pos.y) != 0) {
                 if (this.collidesWithMap(pos.x, pos.ly) != 0) {
                     if (this.collidesWithMap(pos.lx, pos.y) != 0) {
@@ -130,8 +132,8 @@ export abstract class Entity implements Collidable {
         const invRes = 1 / Entity.physicsResolution;
         this.contactEdges.left = this.collidesWithMap(this.x - invRes, this.y);
         this.contactEdges.right = this.collidesWithMap(this.x + invRes, this.y);
-        this.contactEdges.top = this.collidesWithMap(this.x, this.y - invRes);
-        this.contactEdges.bottom = this.collidesWithMap(this.x, this.y + invRes);
+        this.contactEdges.top = this.collidesWithMap(this.x, this.y + invRes);
+        this.contactEdges.bottom = this.collidesWithMap(this.x, this.y - invRes);
     }
 
     /**

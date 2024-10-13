@@ -69,10 +69,13 @@ export class GameMap {
                     if (GameMap.tileset.collisionMaps[tile] == undefined) {
                         if (tile >= 0) GameMap.logger.error(`Tile with no collision map in "${this.name}" at (${x}, ${y}) - ${tile}`);
                     } else if (GameMap.tileset.collisionMaps[tile].length > 0) {
-                        this.collisionGrid[y][x].push(...GameMap.tileset.collisionMaps[tile].map((col) => ({
-                            ...col,
+                        this.collisionGrid[y][x].push(...GameMap.tileset.collisionMaps[tile].map<MapCollision>((col) => ({
                             x: col.x + x,
                             y: col.y + y,
+                            halfBoundingWidth: col.halfBoundingWidth,
+                            halfBoundingHeight: col.halfBoundingHeight,
+                            vertices: col.vertices.map((p) => ({ x: p.x + x, y: p.y + y })),
+                            friction: col.friction
                         })));
                     }
                 }
@@ -140,22 +143,24 @@ export class GameTileset {
             }
             // convert collision rectangles to collidables for entity collision
             if (tile.objectgroup == undefined) continue;
-            const collisions = this.collisionMaps[tile.id - 1];
+            const collisions = this.collisionMaps[tile.id];
             for (const col of tile.objectgroup.objects) {
                 const hw = col.width / raw.tilewidth / 2;
                 const hh = col.height / raw.tilewidth / 2;
                 const friction = col.properties?.find((prop: any) => prop.name == 'friction')?.value;
                 if (typeof friction != 'number') throw new TypeError('Invalid or missing friction coefficient for tile ' + tile.id);
+                const x = col.x / raw.tilewidth + hw;
+                const y = 1 - (col.y / raw.tilewidth + hh);
                 collisions.push({
-                    x: col.x / raw.tilewidth + hw,
-                    y: 1 - (col.y / raw.tilewidth + hh),
+                    x: x,
+                    y: y,
                     halfBoundingWidth: hw,
                     halfBoundingHeight: hh,
                     vertices: [
-                        { x: -hw, y: hh },
-                        { x: hw, y: hh },
-                        { x: hw, y: -hh },
-                        { x: -hw, y: -hh }
+                        { x: x - hw, y: y + hh },
+                        { x: x + hw, y: y + hh },
+                        { x: x + hw, y: y - hh },
+                        { x: x - hw, y: y - hh }
                     ],
                     friction: friction
                 });
