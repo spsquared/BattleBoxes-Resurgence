@@ -1,11 +1,15 @@
+import { NamedLogger } from '@/common/log';
 import config from '@/config';
 
+import { logger } from '../host';
 import GameMap from '../map';
 
 /**
  * The generic `Entity` class that the physics engine will run on. Has basic movement and collisions.
  */
 export abstract class Entity implements Collidable {
+    static readonly logger: NamedLogger = new NamedLogger(logger, 'Player');
+    
     /**Global tick counter that increments for every tick */
     static tick: number = 0;
     /**
@@ -314,7 +318,7 @@ export interface EntityTickData {
  * A 2D point.
  */
 export interface Point {
-    x: number,
+    x: number
     y: number
 }
 

@@ -1227,6 +1227,15 @@
             }
         }, 
         {
+         "id":36,
+         "properties":[
+                {
+                 "name":"spawnpoint",
+                 "type":"string",
+                 "value":"player"
+                }]
+        }, 
+        {
          "id":37,
          "objectgroup":
             {
@@ -1572,6 +1581,15 @@
             }
         }, 
         {
+         "id":45,
+         "properties":[
+                {
+                 "name":"spawnpoint",
+                 "type":"string",
+                 "value":"lootbox="
+                }]
+        }, 
+        {
          "id":50,
          "objectgroup":
             {
@@ -1634,6 +1652,24 @@
              "x":0,
              "y":0
             }
+        }, 
+        {
+         "id":54,
+         "properties":[
+                {
+                 "name":"spawnpoint",
+                 "type":"string",
+                 "value":"lootbox=+"
+                }]
+        }, 
+        {
+         "id":63,
+         "properties":[
+                {
+                 "name":"spawnpoint",
+                 "type":"string",
+                 "value":"lootbox=-"
+                }]
         }, 
         {
          "id":73,

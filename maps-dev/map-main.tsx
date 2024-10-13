@@ -350,6 +350,11 @@
    </object>
   </objectgroup>
  </tile>
+ <tile id="36">
+  <properties>
+   <property name="spawnpoint" value="player"/>
+  </properties>
+ </tile>
  <tile id="37">
   <objectgroup draworder="index" id="2">
    <object id="2" x="3" y="0" width="2" height="8">
@@ -449,6 +454,11 @@
    </object>
   </objectgroup>
  </tile>
+ <tile id="45">
+  <properties>
+   <property name="spawnpoint" value="lootbox="/>
+  </properties>
+ </tile>
  <tile id="50">
   <objectgroup draworder="index" id="2">
    <object id="1" x="0" y="0" width="8" height="4">
@@ -466,6 +476,16 @@
     </properties>
    </object>
   </objectgroup>
+ </tile>
+ <tile id="54">
+  <properties>
+   <property name="spawnpoint" value="lootbox=+"/>
+  </properties>
+ </tile>
+ <tile id="63">
+  <properties>
+   <property name="spawnpoint" value="lootbox=-"/>
+  </properties>
  </tile>
  <tile id="73">
   <objectgroup draworder="index" id="2">

@@ -25,11 +25,11 @@
             "scaleInEditor": 16
         },
         "lobby.tmx": {
-            "scale": 2,
-            "selectedLayer": 1,
+            "scale": 1.5,
+            "selectedLayer": 2,
             "viewCenter": {
-                "x": 180.75,
-                "y": 183.75
+                "x": 431.6666666666667,
+                "y": 106.99999999999997
             }
         },
         "map-main.tsx": {
@@ -51,7 +51,7 @@
         "map-main.tsx"
     ],
     "project": "maps.tiled-project",
-    "property.type": "float",
+    "property.type": "string",
     "recentFiles": [
         "lobby.tmx",
         "map-main.tsx",

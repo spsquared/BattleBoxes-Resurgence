@@ -164,7 +164,10 @@ parentMessenger.on('playerConnect', (username: string) => {
         playerProperties: Player.baseProperties
     });
     const player = Player.list.get(username);
-    if (player !== undefined) player.connected = true;
+    if (player !== undefined) {
+        player.connected = true;
+        player.toRandomSpawnpoint();
+    }
 });
 
 // load maps immediately and start ticking

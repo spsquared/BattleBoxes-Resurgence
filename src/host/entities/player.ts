@@ -3,7 +3,8 @@ import { NamedLogger } from '@/common/log';
 
 import { Game } from '../game';
 import { logger } from '../host';
-import Entity, { EntityTickData } from './entity';
+import GameMap from '../map';
+import Entity, { EntityTickData, Point } from './entity';
 
 /**
  * Represents a player controlled by a client. Movement physics is performed by the client and server in
@@ -11,6 +12,8 @@ import Entity, { EntityTickData } from './entity';
  * validate the movement and prevent cheating. Any discrepancy will cause the server to override the client.
  */
 export class Player extends Entity {
+    static readonly logger: NamedLogger = new NamedLogger(logger, 'Player');
+
     static readonly list: Map<string, Player> = new Map();
 
     private static readonly maxFastTickInfractions = 10;
@@ -36,6 +39,7 @@ export class Player extends Entity {
         };
 
     static readonly baseProperties: Readonly<Player['properties']> = {
+        // gravity: 0.2,
         gravity: 0,
         movePower: 1,
         jumpPower: 2,
@@ -176,12 +180,29 @@ export class Player extends Entity {
     }
 
     setPosition(x: number, y: number, angle?: number): void {
-        // need to teleport without desyncing server/client
-        // override client position on next tick, completely bypassing anticheat
+        this.x = x;
+        this.y = y;
+        this.angle = angle ?? this.angle;
+        this.calculateCollisionInfo();
     }
 
     setVelocity(vx: number, vy: number, va?: number): void {
-        // override client position on next tick, completely bypassing anticheat
+        this.vx = vx;
+        this.vy = vy;
+        this.va = va ?? this.va;
+    }
+
+    toRandomSpawnpoint(): void {
+        if (GameMap.current === undefined) {
+            this.logger.error('Could not teleport to random spawnpoint because no map is loaded');
+            return;
+        }
+        const spawnpoint = Array.from(GameMap.current.playerSpawnpoints)[Math.floor(Math.random() * GameMap.current.playerSpawnpoints.size)];
+        if (spawnpoint === undefined) {
+            this.logger.error('Could not teleport to random spawnpoint because no spawnpoints');
+            return;
+        }
+        this.setPosition(spawnpoint.x + 0.5, spawnpoint.y + 0.5);
     }
 
     private updateModifiers(): void {
@@ -239,6 +260,25 @@ export class Player extends Entity {
             player.tick();
             return player.tickData;
         });
+    }
+
+    /**
+     * Spreads players throughout the map using the player spawnpoints.
+     */
+    static spreadPlayers(): void {
+        if (GameMap.current === undefined) {
+            Player.logger.error('Could not spread players because no map is loaded');
+            return;
+        }
+        const unusedSpawns = Array.from(GameMap.current.playerSpawnpoints);
+        for (const player of Player.list.values()) {
+            const spawnpoint = unusedSpawns.splice(Math.floor(Math.random() * unusedSpawns.length), 1)[0];
+            if (spawnpoint == undefined) {
+                Player.logger.error('Could not spread players because not enough spawnpoints');
+                break;
+            }
+            player.setPosition(spawnpoint.x + 0.5, spawnpoint.y + 0.5);
+        }
     }
 }
 

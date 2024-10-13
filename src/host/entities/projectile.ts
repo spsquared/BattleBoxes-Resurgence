@@ -1,6 +1,11 @@
+import { NamedLogger } from '@/common/log';
+
+import { logger } from '../host';
 import Entity from './entity';
 
 export class Projectile extends Entity {
+    static readonly logger: NamedLogger = new NamedLogger(logger, 'Projectile');
+    
     static readonly list: Map<number, Projectile> = new Map();
 
     constructor(x: number, y: number, width: number, height: number, angle: number) {
