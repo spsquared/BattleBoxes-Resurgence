@@ -1,8 +1,10 @@
 import type { AccountData } from '@/common/database';
-import { Player } from './entities/player';
-import { logger, parentMessenger, stopServer } from './host';
+import { validateStructure } from '@/common/inputValidation';
 import { NamedLogger } from '@/common/log';
-import { Entity } from './entities/entity';
+
+import Entity from './entities/entity';
+import Player, { PlayerTickInput } from './entities/player';
+import { logger, parentMessenger, stopServer } from './host';
 import GameMap from './map';
 
 /**
@@ -10,9 +12,9 @@ import GameMap from './map';
  */
 export class Game {
     static readonly logger: NamedLogger = new NamedLogger(logger, 'Game');
-    private static running: boolean = false;
+    private static running: boolean = true;
     private static runStart: number = 0;
-    /**Lobby mode enables respawning and disables statistic trackers */
+    /**Lobby mode enables respawning and disables statistic trackers and points */
     private static lobbyMode: boolean = true;
 
     private static readonly perfMetrics: {
@@ -29,6 +31,7 @@ export class Game {
      * Starts ticking, will not end until {@link stop} is called.
      */
     static async startTickLoop(): Promise<void> {
+        this.runStart = performance.now();
         while (this.running) {
             const start = performance.now();
             this.tick();
@@ -61,6 +64,7 @@ export class Game {
         parentMessenger.emit('tick', {
             tick: Entity.tick,
             tps: metrics.tps.curr,
+            map: GameMap.current?.name ?? '',
             players: Player.nextTick()
         });
     }
@@ -70,9 +74,24 @@ export class Game {
      * @param user User data to initialize player with
      */
     static addPlayer(user: AccountData): void {
-        new Player(user);
-        this.logger.debug(`Added ${user.username} to game`);
-        parentMessenger.emit('initPlayerPhysics', [user.username, Player.baseProperties]);
+        const player = new Player(user);
+        this.logger.info(`Added ${player.username} to game`);
+        // player inputs
+        const onPhysicsTick = (packet: PlayerTickInput) => {
+            if (!validateStructure<PlayerTickInput>(packet, {
+                tick: 0,
+                modifiers: [0],
+                inputs: { left: false, right: false, up: false, down: false }
+            })) {
+                player.kick('malformed_tick_packet');
+                return;
+            }
+            player.physicsTick(packet);
+        };
+        parentMessenger.on(player.username + '/tick', onPhysicsTick);
+        player.onRemoved(() => {
+            parentMessenger.off(player.username + '/tick', onPhysicsTick);
+        });
     }
 
     /**
@@ -92,7 +111,7 @@ export class Game {
             }
             this.logger.info(`Removed ${username} from game`);
             // close the game if there's not enough players
-            if (Player.list.size < 2) this.stop('Not enough players');
+            if (Player.list.size < 2) setTimeout(() => this.stop('Not enough players'));
         } else this.logger.warn(`Could not remove ${username} from game as player is not in game`);
     }
 
@@ -100,8 +119,6 @@ export class Game {
      * Starts the game immediately.
      */
     static start(): void {
-        this.running = true;
-        this.runStart = performance.now();
         this.startTickLoop();
     }
 
@@ -137,9 +154,21 @@ export class Game {
     }
 }
 
-parentMessenger.addEventListener('playerJoin', (user: AccountData) => Game.addPlayer(user));
-parentMessenger.addEventListener('playerLeave', (username: string, reason?: string) => Game.removePlayer(username, reason));
+// events from socketio
+parentMessenger.on('playerJoin', (user: AccountData) => Game.addPlayer(user));
+parentMessenger.on('playerLeave', (username: string, reason?: string) => Game.removePlayer(username, reason));
+parentMessenger.on('playerConnect', (username: string) => {
+    parentMessenger.emit(username + '/initPlayerPhysics', {
+        tick: Entity.tick,
+        physicsResolution: Entity.physicsResolution,
+        playerProperties: Player.baseProperties
+    });
+    const player = Player.list.get(username);
+    if (player !== undefined) player.connected = true;
+});
 
 // load maps immediately and start ticking
 GameMap.reloadMaps().then(() => GameMap.current = GameMap.maps.get('lobby'));
 Game.startTickLoop();
+
+export default Game;

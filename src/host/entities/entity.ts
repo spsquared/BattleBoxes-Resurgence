@@ -1,4 +1,6 @@
-import GameMap from "../map";
+import config from '@/config';
+
+import GameMap from '../map';
 
 /**
  * The generic `Entity` class that the physics engine will run on. Has basic movement and collisions.
@@ -6,6 +8,11 @@ import GameMap from "../map";
 export abstract class Entity implements Collidable {
     /**Global tick counter that increments for every tick */
     static tick: number = 0;
+    /**
+     * Number of subunits to divide each grid unit into for movement physics - larger values are more accurate but slower.
+     * **Small values cause inconsistent collisions!**
+     */
+    static readonly physicsResolution: number = config.gamePhysicsResolution;
 
     private static idCounter: number;
     readonly id: number;
@@ -80,23 +87,22 @@ export abstract class Entity implements Collidable {
         this.calculateCollisionInfo();
         const startx = this.x;
         const starty = this.y;
-        const steps = Math.ceil(Math.max(Math.abs(this.vx), Math.abs(this.vy)));
-        const dx = this.vx / steps;
-        const dy = this.vy / steps;
+        const steps = Math.max(Math.abs(this.vx), Math.abs(this.vy)) * Entity.physicsResolution;
+        const step = 1 / steps;
         const pos = {
             x: this.x,
             y: this.y,
             lx: this.x,
             ly: this.y
         };
-        for (let step = 1; step <= steps; step++) {
+        for (let i = step; i <= 1; i += step) {
             pos.lx = pos.x;
             pos.ly = pos.y;
-            pos.x = this.x + dx * step;
-            pos.y = this.y + dy * step;
-            if (this.collidesWithMap(pos.x, pos.y)) {
-                if (this.collidesWithMap(pos.x, pos.ly)) {
-                    if (this.collidesWithMap(pos.lx, pos.y)) {
+            pos.x = this.x + this.vx * i;
+            pos.y = this.y + this.vy * i;
+            if (this.collidesWithMap(pos.x, pos.y) != 0) {
+                if (this.collidesWithMap(pos.x, pos.ly) != 0) {
+                    if (this.collidesWithMap(pos.lx, pos.y) != 0) {
                         // stuck, can't go anywhere
                         pos.x = pos.lx;
                         pos.y = pos.ly;
@@ -117,10 +123,11 @@ export abstract class Entity implements Collidable {
         this.vy = this.y - starty;
         this.angle += this.va;
         this.calculateCollisionInfo();
-        this.contactEdges.left = this.collidesWithMap(this.x - 1, this.y);
-        this.contactEdges.right = this.collidesWithMap(this.x + 1, this.y);
-        this.contactEdges.top = this.collidesWithMap(this.x, this.y - 1);
-        this.contactEdges.bottom = this.collidesWithMap(this.x, this.y + 1);
+        const invRes = 1 / Entity.physicsResolution;
+        this.contactEdges.left = this.collidesWithMap(this.x - invRes, this.y);
+        this.contactEdges.right = this.collidesWithMap(this.x + invRes, this.y);
+        this.contactEdges.top = this.collidesWithMap(this.x, this.y - invRes);
+        this.contactEdges.bottom = this.collidesWithMap(this.x, this.y + invRes);
     }
 
     /**
@@ -135,7 +142,7 @@ export abstract class Entity implements Collidable {
         if (GameMap.current === undefined) return 0;
         const sx = Math.max(Math.floor(x - this.halfBoundingWidth), 0);
         const ex = Math.min(Math.ceil(x + this.halfBoundingWidth), GameMap.current.width - 1);
-        const sy = Math.max(Math.floor(y + this.halfBoundingHeight), 0);
+        const sy = Math.max(Math.floor(y - this.halfBoundingHeight), 0);
         const ey = Math.min(Math.ceil(y + this.halfBoundingHeight), GameMap.current.height - 1);
         const dx = x - this.x;
         const dy = y - this.y;
@@ -144,13 +151,13 @@ export abstract class Entity implements Collidable {
             for (let cx = sx; cx <= ex; cx++) {
                 for (const col of GameMap.current.collisionGrid[cy][cx]) {
                     if (Math.abs(x - col.x) <= this.halfBoundingWidth + col.halfBoundingWidth && Math.abs(y - col.y) <= this.halfBoundingHeight + col.halfBoundingHeight) {
-                        for (const p of this.vertices) {
-                            if (col.vertices.every((q, i) => this.isWithin(p, q, col.vertices[(i + 1) % col.vertices.length]))) {
+                        for (const p of vertices) {
+                            if (col.vertices.every((q, i) => Entity.isWithin(p, q, col.vertices[(i + 1) % col.vertices.length]))) {
                                 return col.friction;
                             }
                         }
                         for (const p of col.vertices) {
-                            if (vertices.every((q, i) => this.isWithin(p, q, vertices[(i + 1) % vertices.length]))) {
+                            if (vertices.every((q, i) => Entity.isWithin(p, q, vertices[(i + 1) % vertices.length]))) {
                                 return col.friction;
                             }
                         }
@@ -173,12 +180,12 @@ export abstract class Entity implements Collidable {
         }
         // uses a convex hull-like algorithm to detect points within convex polygons
         for (const p of this.vertices) {
-            if (that.vertices.every((q, i) => this.isWithin(p, q, that.vertices[(i + 1) % that.vertices.length]))) {
+            if (that.vertices.every((q, i) => Entity.isWithin(p, q, that.vertices[(i + 1) % that.vertices.length]))) {
                 return true;
             }
         }
         for (const p of that.vertices) {
-            if (this.vertices.every((q, i) => this.isWithin(p, q, this.vertices[(i + 1) % this.vertices.length]))) {
+            if (this.vertices.every((q, i) => Entity.isWithin(p, q, this.vertices[(i + 1) % this.vertices.length]))) {
                 return true;
             }
         }
@@ -198,7 +205,7 @@ export abstract class Entity implements Collidable {
      * @param r Boundary point R
      * @returns If point P is within the boundary of QR
      */
-    private isWithin(p: Point, q: Point, r: Point): boolean {
+    private static isWithin(p: Point, q: Point, r: Point): boolean {
         return q.x * (p.y - r.y) + p.x * (r.y - q.y) + r.x * (q.y - p.y) >= 0;
     }
 
@@ -255,8 +262,8 @@ export abstract class Entity implements Collidable {
         this.boundingHeight = Math.abs(this.height * this.cosVal) + Math.abs(this.width * this.sinVal);
         this.halfBoundingWidth = this.boundingWidth / 2;
         this.halfBoundingHeight = this.boundingHeight / 2;
-        let hWidth = this.width / 2;
-        let hHeight = this.height / 2;
+        const hWidth = this.width / 2;
+        const hHeight = this.height / 2;
         this.vertices[0] = { x: this.x - this.cosVal * hWidth + this.sinVal * hHeight, y: this.y + this.cosVal * hWidth + this.sinVal * hHeight };
         this.vertices[1] = { x: this.x + this.cosVal * hWidth + this.sinVal * hHeight, y: this.y - this.cosVal * hWidth + this.sinVal * hHeight };
         this.vertices[2] = { x: this.x + this.cosVal * hWidth - this.sinVal * hHeight, y: this.y - this.cosVal * hWidth - this.sinVal * hHeight };
@@ -321,3 +328,5 @@ export interface Collidable {
     halfBoundingHeight: number
     readonly vertices: Point[]
 }
+
+export default Entity;

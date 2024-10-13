@@ -513,11 +513,12 @@
   </objectgroup>
  </tile>
  <tile id="83">
-  <properties>
-   <property name="friction" type="float" value="1"/>
-  </properties>
   <objectgroup draworder="index" id="2">
-   <object id="1" x="0" y="4" width="8" height="4"/>
+   <object id="1" x="0" y="4" width="8" height="4">
+    <properties>
+     <property name="friction" type="float" value="1"/>
+    </properties>
+   </object>
   </objectgroup>
  </tile>
  <tile id="84">

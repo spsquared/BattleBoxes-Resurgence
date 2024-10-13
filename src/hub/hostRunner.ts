@@ -180,6 +180,10 @@ export class GameHostRunner {
      */
     async addPlayer(username: string): Promise<string | AccountOpResult> {
         this.logger.info(`Adding ${username} to game`, true);
+        if (this.players.has(username)) {
+            this.logger.info('Could not add player due to already being in game');
+            return AccountOpResult.ALREADY_EXISTS;
+        }
         const userData = await this.db.getAccountData(username);
         if (typeof userData != 'object') {
             this.logger.error('Could not add player due to database error: ' + reverse_enum(AccountOpResult, userData))
@@ -190,6 +194,13 @@ export class GameHostRunner {
         const authCode = randomSecureUUID();
         this.authCodes.set(authCode, username);
         if (config.debugMode) this.logger.debug(`Authentication code "${authCode}" generated for ${username}`, true);
+        setTimeout(() => {
+            if (this.authCodes.has(authCode)) {
+                this.logger.warn(`Authentication code "${authCode}" was not used and timed out after ${config.gameConnectTimeout}s`);
+                this.authCodes.delete(authCode);
+                this.workerMessenger.emit('playerLeave', username);
+            }
+        }, config.gameConnectTimeout * 1000);
         return authCode;
     }
 
@@ -223,9 +234,6 @@ export class GameHostRunner {
     private async initServerEvents(): Promise<void> {
         this.workerMessenger.on('tick', (tickDat) => this.io.emit('tick', tickDat));
         this.workerMessenger.on('kick', (username: string, reason: string) => this.removePlayer(username, reason));
-        this.workerMessenger.on('initPlayerPhysics', ([username, baseProperties]: [string, any]) => {
-            this.io.to(username).emit('initPlayerPhysics', [baseProperties]);
-        })
         this.workerMessenger.on('playerData', async (data: AccountData) => {
             const res = await this.db.updateAccountData(data);
             if (res != AccountOpResult.SUCCESS) this.logger.error('Failed to save player data: ' + reverse_enum(AccountOpResult, res));
@@ -239,6 +247,7 @@ export class GameHostRunner {
      */
     private async handlePlayerConnection(s: SocketIOSocket): Promise<void> {
         const socket = s;
+        if (config.debugMode) this.logger.debug(`Incoming Socket.IO connection from ${socket.handshake.address}\n  Auth: ${JSON.stringify(socket.handshake.auth)}`, true);
         if (socket.handshake.auth == undefined || typeof socket.handshake.auth.token != 'string') {
             this.logger.warn(`'Socket.IO connection with no authentication from ${socket.handshake.address} was blocked`);
             socket.disconnect();
@@ -261,9 +270,10 @@ export class GameHostRunner {
             socket.disconnect();
             return;
         }
+        GameHostRunner.existingPlayers.add(username);
         socket.join(username);
         this.players.set(username, socket);
-        if (config.debugMode) this.logger.debug(`${username} joined the game`);
+        if (config.debugMode) this.logger.debug(`${username} connected`);
 
         // not this time!!!
         socket.on('error', () => {
@@ -271,9 +281,9 @@ export class GameHostRunner {
             socket.disconnect();
         });
 
-        const sendEvents: string[] = [];
+        const sendEvents: string[] = ['initPlayerPhysics', 'pong'];
         const sendEventHandlers: (() => void)[] = [];
-        const receiveEvents: string[] = ['tick'];
+        const receiveEvents: string[] = ['tick', 'ping'];
         const receiveEventHandlers: (() => void)[] = [];
         for (const ev of sendEvents) {
             const handle = (...data: any[]) => socket.emit(ev, ...data);
@@ -297,8 +307,9 @@ export class GameHostRunner {
             }
         });
 
-        // the thread already knows the player joined because addPlayer was called
+        // notify client and host of connection
         socket.emit('join');
+        this.workerMessenger.emit('playerConnect', username);
     }
 
     sendBroadcastChatMessage(message: ChatMessageSection | ChatMessageSection[]) {
@@ -379,3 +390,5 @@ export interface ChatMessageSection {
         fontStyle?: 'normal' | 'italic'
     }
 }
+
+export default GameHostManager;

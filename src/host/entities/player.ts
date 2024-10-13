@@ -1,10 +1,9 @@
 import type { AccountData } from '@/common/database';
-import { validateStructure } from '@/common/inputValidation';
-
-import { Entity, EntityTickData } from './entity';
-import { Game } from '../game';
 import { NamedLogger } from '@/common/log';
+
+import { Game } from '../game';
 import { logger } from '../host';
+import Entity, { EntityTickData } from './entity';
 
 /**
  * Represents a player controlled by a client. Movement physics is performed by the client and server in
@@ -16,7 +15,9 @@ export class Player extends Entity {
 
     private static readonly maxFastTickInfractions = 10;
     private static readonly maxSlowTickInfractions = 20;
-    private static readonly maxTickLag = 40;
+    private static readonly maxTickLead = 40;
+    private static readonly maxTickLag = 80;
+    private static readonly infractionDecayRate = 20;
 
     readonly logger: NamedLogger;
     readonly username: string;
@@ -36,8 +37,8 @@ export class Player extends Entity {
 
     static readonly baseProperties: Readonly<Player['properties']> = {
         gravity: 0,
-        movePower: 10,
-        jumpPower: 20,
+        movePower: 1,
+        jumpPower: 2,
         airMovePower: 0.5,
         drag: 0.99,
         friction: 0.95,
@@ -65,9 +66,10 @@ export class Player extends Entity {
     private static readonly colorList = ['#F00', '#F90', '#0F0', '#0FC', '#09F', '#00F', '#90F', '#F0F'];
     private static readonly usedColors: Set<string> = new Set();
     readonly color: string;
+    connected: boolean = false;
 
     constructor(data: AccountData) {
-        super(0, 0, 48, 48);
+        super(0, 0, 0.75, 0.75);
         this.username = data.username;
         this.logger = new NamedLogger(logger, this.username);
         this.accountData = data;
@@ -80,20 +82,25 @@ export class Player extends Entity {
     tick() {
         // check for lootboxes and stuff
         // check for missed ticks and other infractions
-        if (this.clientPhysics.tick - Entity.tick > Player.maxTickLag) {
+        if (!this.connected) return;
+        if (this.clientPhysics.tick - Entity.tick > Player.maxTickLead) {
             this.clientPhysics.fastTickInfractions++;
             this.logger.warn(`Client ahead of server ticking by ${this.clientPhysics.tick - Entity.tick} ticks - ${Player.maxFastTickInfractions - this.clientPhysics.fastTickInfractions} violations remain`);
-            if (this.clientPhysics.fastTickInfractions > Player.maxFastTickInfractions) {
+            if (this.clientPhysics.fastTickInfractions >= Player.maxFastTickInfractions) {
                 this.kick('client_too_fast');
                 return;
             }
         } else if (Entity.tick - this.clientPhysics.tick > Player.maxTickLag) {
             this.clientPhysics.slowTickInfractions++;
             this.logger.warn(`Client behind server ticking by ${Entity.tick - this.clientPhysics.tick} ticks - ${Player.maxSlowTickInfractions - this.clientPhysics.slowTickInfractions} violations remain`);
-            if (this.clientPhysics.slowTickInfractions > Player.maxSlowTickInfractions) {
+            if (this.clientPhysics.slowTickInfractions >= Player.maxSlowTickInfractions) {
                 this.kick('client_too_slow');
                 return;
             }
+        }
+        if (Entity.tick % Player.infractionDecayRate == 0) {
+            this.clientPhysics.fastTickInfractions = Math.max(0, this.clientPhysics.fastTickInfractions - 1);
+            this.clientPhysics.slowTickInfractions = Math.max(0, this.clientPhysics.slowTickInfractions - 1);
         }
     }
 
@@ -103,15 +110,8 @@ export class Player extends Entity {
      * @param packet Client tick packet
      */
     physicsTick(packet: PlayerTickInput): void {
-        // input validation
-        if (!validateStructure<PlayerTickInput>(packet, {
-            tick: 0,
-            modifiers: [0],
-            inputs: { left: false, right: false, up: false, down: false }
-        })) {
-            this.kick('Malformed tick packet');
-            return;
-        }
+        // update tick
+        this.clientPhysics.tick = packet.tick;
         // tick simulation - should be identical to client (but will override client anyway)
         // update modifiers
         // tracks how many ticks of effect are remaining and corroborates with client array
@@ -157,7 +157,7 @@ export class Player extends Entity {
         const wallGrip = this.properties.grip * (this.contactEdges.left || 1) * (this.contactEdges.right || 1);
         if ((this.contactEdges.left && packet.inputs.left) || (this.contactEdges.right && packet.inputs.right)) this.vy *= Math.pow(2, -wallGrip);
         this.vx += ((packet.inputs.left ? -1 : 0) + (packet.inputs.right ? 1 : 0)) * this.properties.movePower * groundGrip;
-        this.vy += this.properties.jumpPower * wallGrip;
+        if (this.contactEdges.bottom && packet.inputs.up) this.vy += this.properties.jumpPower * wallGrip;
         // apply gravity using correct angle
         this.vy -= this.properties.gravity * this.cosVal;
         this.vx += this.properties.gravity * this.sinVal;
@@ -170,7 +170,6 @@ export class Player extends Entity {
             ...super.tickData,
             username: this.username,
             color: this.color,
-            contactEdges: this.contactEdges,
             properties: this.properties,
             modifiers: Array.from(this.modifiers.entries(), ([id, mod]) => ({ id: id, modifier: mod.modifier, length: mod.length }))
         };
@@ -222,6 +221,7 @@ export class Player extends Entity {
      */
     remove() {
         super.remove();
+        this.connected = false;
         Player.usedColors.delete(this.color);
         const removed = !Player.list.has(this.username);
         Player.list.delete(this.username);
@@ -246,7 +246,7 @@ export class Player extends Entity {
  * A packet representing a client physics tick, to be cross-checked by the server to minimize cheating.
  * The server runs the same tick to make sure movement physics are unmodified and effect timers are correct.
  */
-interface PlayerTickInput {
+export interface PlayerTickInput {
     /**Client tick number, not strictly linked to server tickrate */
     readonly tick: number
     /**List of modifier ID list for cross-checking with server */
@@ -266,7 +266,6 @@ interface PlayerTickInput {
 export interface PlayerTickData extends EntityTickData {
     readonly username: string
     readonly color: string
-    readonly contactEdges: Entity['contactEdges']
     readonly properties: Player['properties']
     readonly modifiers: { id: number, modifier: Modifiers, length: number }[]
 }
@@ -288,3 +287,5 @@ export enum Modifiers {
     /**Halves player friction for SPEEEED */
     LOW_FRICTION
 }
+
+export default Player;

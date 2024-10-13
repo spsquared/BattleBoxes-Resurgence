@@ -1807,6 +1807,12 @@
                      "height":4,
                      "id":1,
                      "name":"",
+                     "properties":[
+                            {
+                             "name":"friction",
+                             "type":"float",
+                             "value":1
+                            }],
                      "rotation":0,
                      "type":"",
                      "visible":true,
@@ -1819,13 +1825,7 @@
              "visible":true,
              "x":0,
              "y":0
-            },
-         "properties":[
-                {
-                 "name":"friction",
-                 "type":"float",
-                 "value":1
-                }]
+            }
         }, 
         {
          "id":84,

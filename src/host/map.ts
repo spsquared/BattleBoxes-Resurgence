@@ -17,6 +17,7 @@ export class GameMap {
 
     static readonly logger: NamedLogger = new NamedLogger(logger, 'GameMap');
 
+    readonly name: string;
     readonly width: number;
     readonly height: number;
     readonly collisionGrid: MapCollision[][][];
@@ -26,7 +27,8 @@ export class GameMap {
      * @param name Unique name/ID of map
      */
     constructor(json: string, name: string) {
-        if (config.debugMode) GameMap.logger.debug('Loading ' + name);
+        this.name = name;
+        if (config.debugMode) GameMap.logger.debug('Loading ' + this.name);
         const start = performance.now();
         const raw = JSON.parse(json);
         if (GameMap.tileset === undefined) throw new ReferenceError('Tileset was not loaded before map load');
@@ -55,8 +57,8 @@ export class GameMap {
                 }
             }
         }
-        GameMap.maps.set(name, this);
-        if (config.debugMode) GameMap.logger.debug(`Loaded ${name} in ${performance.now() - start}ms, size ${raw.width}x${raw.height}`, true);
+        GameMap.maps.set(this.name, this);
+        if (config.debugMode) GameMap.logger.debug(`Loaded ${this.name} in ${performance.now() - start}ms, size ${raw.width}x${raw.height}`, true);
     }
 
     /**
@@ -67,7 +69,7 @@ export class GameMap {
         const start = performance.now();
         const [tilesetJson, mapsJson] = await Promise.all([
             readFile(pathResolve(config.gameSourcePath, 'tileset.json'), { encoding: 'utf8' }),
-            Promise.all(await readdir(pathResolve(config.gameSourcePath, 'maps/')).then((mapsList) => mapsList.map(async (map) => [map, await readFile(pathResolve(config.gameSourcePath, 'maps/', map), { encoding: 'utf8' })])))
+            readdir(pathResolve(config.gameSourcePath, 'maps/')).then((mapsList) => Promise.all(mapsList.map(async (map) => [map, await readFile(pathResolve(config.gameSourcePath, 'maps/', map), { encoding: 'utf8' })])))
         ]);
         this.logger.info('Maps found: ' + mapsJson.map(([name]) => name).join(', '))
         if (config.debugMode) this.logger.debug(`Read map data in ${performance.now() - start}ms`, true);
@@ -92,15 +94,16 @@ export class GameTileset {
         const start = performance.now();
         const raw = JSON.parse(json);
         if (raw.tilewidth != raw.tileheight) throw new RangeError('Non-square tiles in tileset');
-        this.collisionMaps = Array.from(new Array(raw.tilecount), () => new Array());
         // convert collision rectangles to collidables for entity collision
+        this.collisionMaps = Array.from(new Array(raw.tilecount), () => new Array());
         let rectCount = 0;
         for (const tile of raw.tiles) {
+            if (tile.objectgroup == undefined) continue;
             const collisions = this.collisionMaps[tile.id];
-            for (const col of tile.objectgroup?.objects) {
+            for (const col of tile.objectgroup.objects) {
                 const hw = col.width / raw.tilewidth / 2;
                 const hh = col.height / raw.tilewidth / 2;
-                const friction = col.properties.find((prop: any) => prop.name == 'friction')?.value;
+                const friction = col.properties?.find((prop: any) => prop.name == 'friction')?.value;
                 if (typeof friction != 'number') throw new TypeError('Invalid or missing friction coefficient for tile ' + tile.id);
                 collisions.push({
                     x: col.x / raw.tilewidth + hw,
@@ -108,10 +111,10 @@ export class GameTileset {
                     halfBoundingWidth: hw,
                     halfBoundingHeight: hh,
                     vertices: [
-                        { x: -hw, y: -hh },
-                        { x: hw, y: -hh },
+                        { x: -hw, y: hh },
                         { x: hw, y: hh },
-                        { x: -hw, y: hh }
+                        { x: hw, y: -hh },
+                        { x: -hw, y: -hh }
                     ],
                     friction: friction
                 });

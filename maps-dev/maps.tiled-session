@@ -25,11 +25,11 @@
             "scaleInEditor": 16
         },
         "lobby.tmx": {
-            "scale": 4,
+            "scale": 2,
             "selectedLayer": 1,
             "viewCenter": {
-                "x": 343.625,
-                "y": 93.375
+                "x": 180.75,
+                "y": 183.75
             }
         },
         "map-main.tsx": {

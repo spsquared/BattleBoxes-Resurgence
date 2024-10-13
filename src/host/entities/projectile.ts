@@ -1,4 +1,4 @@
-import { Entity } from "./entity";
+import Entity from './entity';
 
 export class Projectile extends Entity {
     static readonly list: Map<number, Projectile> = new Map();
@@ -10,3 +10,5 @@ export class Projectile extends Entity {
     // override movement code to call a function on collision with map and a function on collision with player
     // default to remove on collision with map or player and damage players by 1
 }
+
+export default Projectile;

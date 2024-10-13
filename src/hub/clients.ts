@@ -11,7 +11,7 @@ import config from '@/config';
 
 import { AccountOpResult, Database } from '../common/database';
 import { SessionTokenHandler } from './cryptoUtil';
-import { GameHostManager } from './hostRunner';
+import GameHostManager from './hostRunner';
 import { validateRecaptcha } from './recaptcha';
 
 /**
@@ -81,7 +81,7 @@ export const addClientRoutes = (expapp: Express, db: Database, hosts: GameHostMa
     };
     app.get('/loginTest', authentication, (req, res) => {
         // can only reach if logged in, also used to check if logged in
-        res.sendStatus(200);
+        res.status(200).send(authTokens.getTokenData(req.cookies.authToken));
     });
     app.post('/login', authentication, bodyParser.json(), captchaCheck, async (req, res) => {
         if (req.body == null || !checkValidCreds(req.body.username, req.body.password)) {
@@ -187,3 +187,5 @@ export const addClientRoutes = (expapp: Express, db: Database, hosts: GameHostMa
     app.get('/resources/mapList', (req, res) => res.status(200).send(mapList).end());
     app.use('/resources', express.static(config.gameSourcePath));
 };
+
+export default addClientRoutes;

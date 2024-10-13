@@ -6,7 +6,7 @@ import { isMainThread, workerData } from 'worker_threads';
 
 type ServerConfig = {
     /**TCP port for the HTTP/HTTPS server to listen to (default: 9000) */
-    readonly port: string
+    readonly port: number
     /**Ratelimiting - how many new Socket.IO connections can be made from any given IP address in 1 second before clients are kicked (default: 5) */
     readonly maxConnectPerSecond: number
     /**Ratelimiting - how many new accounts can be made from any given IP address in 1 minute before clients are kicked (default: 1) */
@@ -19,6 +19,14 @@ type ServerConfig = {
     readonly tokenExpireTime: number
     /**Time in minutes until session tokens expire (default: 60) */
     readonly sessionExpireTime: number
+    /**Time in seconds until a pending connection to a game host times out and is removed (default: 10) */
+    readonly gameConnectTimeout: number
+    /**Maximum number of players per game, including AI bots (default: 8) */
+    readonly gameMaxPlayers: number
+    /**Maximum number of AI bots per game (default: 4) */
+    readonly gameMaxBots: number
+    /**Number of subunits to divide each grid unit into for movement physics - larger values are more accurate but slower. **Small values cause inconsistent collisions!** (default: 64) */
+    readonly gamePhysicsResolution: number
     /**Enable debug logging (default: false) */
     readonly debugMode: boolean
     /**Marks the path of the directory the server is installed in. Same as the `BASE_PATH` environment variable (this cannot be edited in `config.json``) */
@@ -58,6 +66,13 @@ const getConfig = (): any => {
 };
 
 const fileConfig = getConfig();
+
+const ensureNumber = (input: any): number => {
+    const n = Number(input);
+    if (isNaN(n)) throw new TypeError('Config option must be a number');
+    return n;
+};
+
 /**
  * Global configuration, loaded from `config.json` in the config folder.
  * If any field is empty in `config.json`, it is filled in with the default.
@@ -65,20 +80,24 @@ const fileConfig = getConfig();
  * In worker threads, this is supplied by the global `workerData` from the host server.
  */
 const config: ServerConfig = isMainThread ? {
-    port: process.env.PORT ?? fileConfig.port ?? 9000,
-    maxConnectPerSecond: fileConfig.maxConnectPerSecond ?? 5,
-    maxSignupPerMinute: fileConfig.maxSignupPerMinute ?? 1,
-    rsaKeyRotateInterval: fileConfig.rsaKeyRotateInterval ?? 86400000,
+    port: ensureNumber(process.env.PORT ?? fileConfig.port ?? 9000),
+    maxConnectPerSecond: ensureNumber(fileConfig.maxConnectPerSecond ?? 5),
+    maxSignupPerMinute: ensureNumber(fileConfig.maxSignupPerMinute ?? 1),
+    rsaKeyRotateInterval: ensureNumber(fileConfig.rsaKeyRotateInterval ?? 86400000),
     useFileDatabase: fileConfig.useFileDatabase ?? false,
-    tokenExpireTime: fileConfig.tokenExpireTime ?? 360,
-    sessionExpireTime: fileConfig.sessionExpireTime ?? 60,
+    tokenExpireTime: ensureNumber(fileConfig.tokenExpireTime ?? 360),
+    sessionExpireTime: ensureNumber(fileConfig.sessionExpireTime ?? 60),
     debugMode: process.argv.includes('debug_mode') ?? process.env.DEBUG_MODE ?? fileConfig.debugMode ?? false,
-    path: process.env.BASE_PATH,
-    scriptPath: process.env.SCRIPT_PATH,
+    gameConnectTimeout: ensureNumber(fileConfig.gameConnectTimeout ?? 10),
+    gameMaxPlayers: ensureNumber(fileConfig.maxPlayers ?? 8),
+    gameMaxBots: ensureNumber(fileConfig.maxBots ?? 5),
+    gamePhysicsResolution: ensureNumber(fileConfig.gamePhysicsResolution ?? 64),
+    path: process.env.BASE_PATH as string,
+    scriptPath: process.env.SCRIPT_PATH as string,
     gameSourcePath: fileConfig.gameSourcePath ?? process.env.GAME_SRC_PATH,
-    configPath: process.env.CONFIG_PATH,
+    configPath: process.env.CONFIG_PATH as string,
     logPath: process.env.LOG_PATH ?? fileConfig.logPath ?? path.resolve(__dirname, '../logs/'),
-} : fileConfig;
+} satisfies ServerConfig : fileConfig;
 
 if (isMainThread) {
     process.env.GAME_SRC_PATH = config.gameSourcePath;

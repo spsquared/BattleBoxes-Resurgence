@@ -15,9 +15,10 @@ parentMessenger.emit('logger', remoteLoggingPort);
 parentMessenger.on('error', (err: Error) => {
     logger.handleError('MessagePort error:', err);
 });
+parentMessenger.on('ping', (m: number) => parentMessenger.emit('pong', m));
 
 // create game (everything is static since singletons are annoying)
-import { Game } from './game';
+import Game from './game';
 
 Promise.all([
     logger.ready

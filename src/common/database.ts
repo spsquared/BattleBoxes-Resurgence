@@ -133,7 +133,28 @@ export class FileDatabase implements Database {
                     }
                     this.data.accounts.clear();
                     for (const username in data.accounts) {
-                        this.data.accounts.set(username, data.accounts[username]);
+                        const account: FileDatabaseAccount = data.accounts[username];
+                        this.data.accounts.set(username, {
+                            username: account.username,
+                            password: account.password,
+                            xp: account.xp ?? 0,
+                            trackers: {
+                                time: account.trackers?.time ?? 0,
+                                distanceMoved: account.trackers?.distanceMoved ?? 0,
+                                airTime: account.trackers?.airTime ?? 0,
+                                jumps: account.trackers?.jumps ?? 0,
+                                wallJumps: account.trackers?.wallJumps ?? 0,
+                                fallDistance: account.trackers?.fallDistance ?? 0,
+                                wallSlideDistance: account.trackers?.wallSlideDistance ?? 0,
+                                shotsFired: account.trackers?.shotsFired ?? 0,
+                                damageDealt: account.trackers?.damageDealt ?? 0,
+                                damagetaken: account.trackers?.damagetaken ?? 0,
+                                damageAbsorbed: account.trackers?.damageAbsorbed ?? 0,
+                                lootboxesOpened: account.trackers?.lootboxesOpened ?? 0
+                            },
+                            achievements: [],
+                            infractions: []
+                        });
                     }
                     resolve();
                 } catch (err) {
@@ -163,7 +184,9 @@ export class FileDatabase implements Database {
                 distanceMoved: 0,
                 airTime: 0,
                 jumps: 0,
+                wallJumps: 0,
                 fallDistance: 0,
+                wallSlideDistance: 0,
                 shotsFired: 0,
                 damageDealt: 0,
                 damagetaken: 0,
@@ -213,7 +236,6 @@ export class FileDatabase implements Database {
         this.data.accounts.delete(username);
         return AccountOpResult.SUCCESS;
     }
-
 }
 
 export interface PsqlDatabaseConstructorParams {
@@ -329,7 +351,9 @@ export class PsqlDatabase implements Database {
                         distanceMoved: raw.trackers.distanceMoved ?? 0,
                         airTime: raw.trackers.airTime ?? 0,
                         jumps: raw.trackers.jumps ?? 0,
+                        wallJumps: raw.trackers.wallJumps ?? 0,
                         fallDistance: raw.trackers.fallDistance ?? 0,
+                        wallSlideDistance: raw.trackers.wallSlideDistance ?? 0,
                         shotsFired: raw.trackers.shotsFired ?? 0,
                         damageDealt: raw.trackers.damageDealt ?? 0,
                         damagetaken: raw.trackers.damagetaken ?? 0,
@@ -411,17 +435,20 @@ export enum AccountOpResult {
     ERROR
 }
 
-/**Descriptor for an account */
+/**
+ * Descriptor for an account
+ */
 export interface AccountData {
     readonly username: string
-    // color maybe? conflicting colors tho
     xp: number
     trackers: {
         time: number
         distanceMoved: number
         airTime: number
         jumps: number
+        wallJumps: number
         fallDistance: number
+        wallSlideDistance: number
         shotsFired: number
         damageDealt: number
         damagetaken: number

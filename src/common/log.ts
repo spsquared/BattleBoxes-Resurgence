@@ -254,7 +254,7 @@ export class MessageChannelLoggerReciever {
                 case 5: this.logger.handleError(message[1][0], message[1][1]); break;
                 case 6: this.logger.handleFatal(message[1][0], message[1][1]); break;
                 case 7: this.remoteLogger.handleError('MessagePort error on remote:', message[1]); break;
-                case 8: this.remoteLogger.debug(message[1][0]); break;
+                case 8: this.remoteLogger.debug(message[1][0], true); break;
                 default: this.selfLogger.error(`Unexpected method "${message[0]}" (payload ${message[1]})`);
             }
         });
