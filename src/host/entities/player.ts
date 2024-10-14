@@ -39,10 +39,11 @@ export class Player extends Entity {
         };
 
     static readonly baseProperties: Readonly<Player['properties']> = {
-        gravity: 0.1,
-        movePower: 0.1,
-        jumpPower: 1,
-        airMovePower: 0.05,
+        gravity: 0.08,
+        movePower: 0.15,
+        jumpPower: 1.2,
+        wallJumpPower: 0.75,
+        airMovePower: 0.08,
         drag: 0.85,
         airDrag: 0.9,
         wallDrag: 0.5,
@@ -52,6 +53,7 @@ export class Player extends Entity {
         gravity: number
         movePower: number
         jumpPower: number
+        wallJumpPower: number
         airMovePower: number
         drag: number
         airDrag: number
@@ -61,6 +63,7 @@ export class Player extends Entity {
             gravity: Player.baseProperties.gravity,
             movePower: Player.baseProperties.movePower,
             jumpPower: Player.baseProperties.jumpPower,
+            wallJumpPower: Player.baseProperties.wallJumpPower,
             airMovePower: Player.baseProperties.airMovePower,
             drag: Player.baseProperties.drag,
             airDrag: Player.baseProperties.airDrag,
@@ -165,8 +168,9 @@ export class Player extends Entity {
             const friction = this.contactEdges.left + this.contactEdges.right;
             this.vy *= Math.pow(this.properties.wallDrag, friction);
             if (packet.inputs.up || packet.inputs.down) {
-                this.vx += -moveInput * this.properties.movePower * this.properties.grip * friction;
-                if (packet.inputs.up) this.vy += this.properties.jumpPower * this.properties.grip * friction;
+                const jumpPower = this.properties.jumpPower * this.properties.grip * friction;
+                this.vx -= moveInput * jumpPower * this.properties.wallJumpPower;
+                if (packet.inputs.up) this.vy += jumpPower;
             }
         } else if (this.contactEdges.bottom != 0) {
             this.vx += moveInput * this.properties.movePower * this.properties.grip * this.contactEdges.bottom;

@@ -156,6 +156,8 @@ export abstract class Entity implements Collidable {
         for (let cy = sy; cy <= ey; cy++) {
             for (let cx = sx; cx <= ex; cx++) {
                 for (const col of GameMap.current.collisionGrid[cy][cx]) {
+                    // bork bork bork
+                    
                     if (Math.abs(x - col.x) <= this.halfBoundingWidth + col.halfBoundingWidth && Math.abs(y - col.y) <= this.halfBoundingHeight + col.halfBoundingHeight) {
                         for (const p of vertices) {
                             if (col.vertices.every((q, i) => Entity.isWithin(p, q, col.vertices[(i + 1) % col.vertices.length]))) {
@@ -168,6 +170,7 @@ export abstract class Entity implements Collidable {
                             }
                         }
                     }
+
                 }
             }
         }
@@ -176,7 +179,7 @@ export abstract class Entity implements Collidable {
 
     /**
      * If the entity is currently intersecting with another entity or other {@link Collidable} object.
-     * Uses a convex hull-like algorithm for intersections of arbitrary convex polygons.
+     * aaaa algorithm
      * @param that Other entity to check collision with
      * @returns If the entities are colliding
      */
@@ -184,7 +187,8 @@ export abstract class Entity implements Collidable {
         if (Math.abs(this.x - that.x) > this.halfBoundingWidth + that.halfBoundingWidth || Math.abs(this.y - that.y) > this.halfBoundingHeight + that.halfBoundingHeight) {
             return false;
         }
-        // uses a convex hull-like algorithm to detect points within convex polygons
+
+        // borky bork bork
         for (const p of this.vertices) {
             if (that.vertices.every((q, i) => Entity.isWithin(p, q, that.vertices[(i + 1) % that.vertices.length]))) {
                 return true;
@@ -195,6 +199,7 @@ export abstract class Entity implements Collidable {
                 return true;
             }
         }
+
         return false;
     }
 

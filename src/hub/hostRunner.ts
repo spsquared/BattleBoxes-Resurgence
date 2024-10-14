@@ -307,8 +307,7 @@ export class GameHostRunner {
             }
         });
 
-        // notify client and host of connection
-        socket.emit('join');
+        // notify host of connection completion
         this.workerMessenger.emit('playerConnect', username);
     }
 
