@@ -2,14 +2,14 @@ import { NamedLogger } from '@/common/log';
 import config from '@/config';
 
 import { logger } from '../host';
-import GameMap from '../map';
+import GameMap, { MapCollision } from '../map';
 
 /**
  * The generic `Entity` class that the physics engine will run on. Has basic movement and collisions.
  */
 export abstract class Entity implements Collidable {
     static readonly logger: NamedLogger = new NamedLogger(logger, 'Player');
-    
+
     /**Global tick counter that increments for every tick */
     static tick: number = 0;
     /**
@@ -89,63 +89,65 @@ export abstract class Entity implements Collidable {
      */
     nextPosition(): void {
         this.calculateCollisionInfo();
-        const startx = this.x;
-        const starty = this.y;
         const steps = Math.max(Math.abs(this.vx), Math.abs(this.vy)) * Entity.physicsResolution;
         const step = 1 / steps;
-        const dx = this.vx / steps;
-        const dy = this.vy / steps;
         const pos = {
             x: this.x,
             y: this.y,
             lx: this.x,
-            ly: this.y
+            ly: this.y,
+            dx: this.vx / steps,
+            dy: this.vy / steps
         };
-        for (let i = step; i <= 1; i += step) {
+        const collisionGap = 1.01;
+        for (let i = step; i <= 1 && (pos.dx != 0 || pos.dy != 0); i += step) {
             pos.lx = pos.x;
             pos.ly = pos.y;
-            pos.x += dx;
-            pos.y += dy;
-            if (this.collidesWithMap(pos.x, pos.y) != 0) {
-                if (this.collidesWithMap(pos.x, pos.ly) != 0) {
-                    if (this.collidesWithMap(pos.lx, pos.y) != 0) {
-                        // stuck, can't go anywhere
-                        pos.x = pos.lx;
-                        pos.y = pos.ly;
-                        break;
+            pos.x += pos.dx;
+            pos.y += pos.dy;
+            const col1 = this.collidesWithMap(pos.x, pos.y);
+            if (col1 !== null) {
+                const col2 = this.collidesWithMap(pos.x, pos.ly);
+                if (col2 !== null) {
+                    const col3 = this.collidesWithMap(pos.lx, pos.y);
+                    if (col3 !== null) {
+                        // stuck!
+                        pos.x = pos.lx = col3.x + (pos.x - col3.x < 0 ? -collisionGap : collisionGap) * (col3.halfBoundingWidth + this.halfBoundingWidth);
+                        pos.y = pos.ly = col3.y + (pos.y - col3.y < 0 ? -collisionGap : collisionGap) * (col3.halfBoundingHeight + this.halfBoundingHeight);
+                        pos.dx = this.vx = 0;
+                        pos.dy = this.vy = 0;
                     } else {
-                        // vertical slide
-                        pos.x = pos.lx;
+                        // vertical slide, snap to vertical face
+                        pos.x = pos.lx = col2.x + (pos.x - col2.x < 0 ? -collisionGap : collisionGap) * (col2.halfBoundingWidth + this.halfBoundingWidth);
+                        pos.dx = this.vx = 0;
                     }
                 } else {
-                    // horizontal slide
-                    pos.y = pos.ly;
+                    // horizontal slide, snap to horizontal face
+                    pos.y = pos.ly = col1.y + (pos.y - col1.y < 0 ? -collisionGap : collisionGap) * (col1.halfBoundingHeight + this.halfBoundingHeight);
+                    pos.dy = this.vy = 0;
                 }
             }
         }
         this.x = pos.x;
         this.y = pos.y;
-        this.vx = this.x - startx;
-        this.vy = this.y - starty;
         this.angle += this.va;
         this.calculateCollisionInfo();
         const invRes = 1 / Entity.physicsResolution;
-        this.contactEdges.left = this.collidesWithMap(this.x - invRes, this.y);
-        this.contactEdges.right = this.collidesWithMap(this.x + invRes, this.y);
-        this.contactEdges.top = this.collidesWithMap(this.x, this.y + invRes);
-        this.contactEdges.bottom = this.collidesWithMap(this.x, this.y - invRes);
+        this.contactEdges.left = this.collidesWithMap(this.x - invRes, this.y)?.friction ?? 0;
+        this.contactEdges.right = this.collidesWithMap(this.x + invRes, this.y)?.friction ?? 0;
+        this.contactEdges.top = this.collidesWithMap(this.x, this.y + invRes)?.friction ?? 0;
+        this.contactEdges.bottom = this.collidesWithMap(this.x, this.y - invRes)?.friction ?? 0;
     }
 
     /**
      * If the entity would intersect with any part of the map when placed at the coordinates (`x`, `y`).
-     * If so, returns the friction coefficient of the colliding segment.
-     * **Note:** Surfaces with zero friction will appear to be non-collidable!
+     * If so, returns the colliding segment.
      * @param x X coordinate to test
      * @param y Y coordinate to test
-     * @returns Friction coefficient of contacted map, or 0 if no contact
+     * @returns First colliding object or null if no collisions detected.
      */
-    collidesWithMap(x: number, y: number): number {
-        if (GameMap.current === undefined) return 0;
+    collidesWithMap(x: number, y: number): MapCollision | null {
+        if (GameMap.current === undefined) return null;
         const sx = Math.max(Math.floor(x - this.halfBoundingWidth), 0);
         const ex = Math.min(Math.ceil(x + this.halfBoundingWidth), GameMap.current.width - 1);
         const sy = Math.max(Math.floor(y - this.halfBoundingHeight), 0);
@@ -156,30 +158,29 @@ export abstract class Entity implements Collidable {
         for (let cy = sy; cy <= ey; cy++) {
             for (let cx = sx; cx <= ex; cx++) {
                 for (const col of GameMap.current.collisionGrid[cy][cx]) {
-                    // bork bork bork
-                    
-                    if (Math.abs(x - col.x) <= this.halfBoundingWidth + col.halfBoundingWidth && Math.abs(y - col.y) <= this.halfBoundingHeight + col.halfBoundingHeight) {
-                        for (const p of vertices) {
-                            if (col.vertices.every((q, i) => Entity.isWithin(p, q, col.vertices[(i + 1) % col.vertices.length]))) {
-                                return col.friction;
-                            }
-                        }
-                        for (const p of col.vertices) {
-                            if (vertices.every((q, i) => Entity.isWithin(p, q, vertices[(i + 1) % vertices.length]))) {
-                                return col.friction;
-                            }
+                    if (Math.abs(x - col.x) > this.halfBoundingWidth + col.halfBoundingWidth || Math.abs(y - col.y) > this.halfBoundingHeight + col.halfBoundingHeight) {
+                        continue;
+                    }
+                    for (const p of vertices) {
+                        if (col.vertices.every((q, i) => Entity.isWithin(p, q, col.vertices[(i + 1) % col.vertices.length]))) {
+                            return col;
                         }
                     }
-
+                    for (const p of col.vertices) {
+                        if (vertices.every((q, i) => Entity.isWithin(p, q, vertices[(i + 1) % vertices.length]))) {
+                            return col;
+                        }
+                    }
                 }
             }
         }
-        return 0;
+        return null;
     }
 
     /**
      * If the entity is currently intersecting with another entity or other {@link Collidable} object.
-     * aaaa algorithm
+     * Uses a convex hull-like algorithm for intersections of convex polygons.
+     * **Note: This algorithm doesn't work for all cases, but those cases can't be reached without passing through a detectable case.**
      * @param that Other entity to check collision with
      * @returns If the entities are colliding
      */
@@ -187,8 +188,6 @@ export abstract class Entity implements Collidable {
         if (Math.abs(this.x - that.x) > this.halfBoundingWidth + that.halfBoundingWidth || Math.abs(this.y - that.y) > this.halfBoundingHeight + that.halfBoundingHeight) {
             return false;
         }
-
-        // borky bork bork
         for (const p of this.vertices) {
             if (that.vertices.every((q, i) => Entity.isWithin(p, q, that.vertices[(i + 1) % that.vertices.length]))) {
                 return true;
@@ -199,7 +198,6 @@ export abstract class Entity implements Collidable {
                 return true;
             }
         }
-
         return false;
     }
 
@@ -276,9 +274,9 @@ export abstract class Entity implements Collidable {
         const hWidth = this.width / 2;
         const hHeight = this.height / 2;
         this.vertices[0] = { x: this.x - this.cosVal * hWidth + this.sinVal * hHeight, y: this.y + this.cosVal * hWidth + this.sinVal * hHeight };
-        this.vertices[1] = { x: this.x + this.cosVal * hWidth + this.sinVal * hHeight, y: this.y - this.cosVal * hWidth + this.sinVal * hHeight };
+        this.vertices[1] = { x: this.x + this.cosVal * hWidth + this.sinVal * hHeight, y: this.y + this.cosVal * hWidth + this.sinVal * hHeight };
         this.vertices[2] = { x: this.x + this.cosVal * hWidth - this.sinVal * hHeight, y: this.y - this.cosVal * hWidth - this.sinVal * hHeight };
-        this.vertices[3] = { x: this.x - this.cosVal * hWidth - this.sinVal * hHeight, y: this.y + this.cosVal * hWidth - this.sinVal * hHeight };
+        this.vertices[3] = { x: this.x - this.cosVal * hWidth - this.sinVal * hHeight, y: this.y - this.cosVal * hWidth - this.sinVal * hHeight };
     }
 
     get tickData(): EntityTickData {

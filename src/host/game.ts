@@ -127,7 +127,7 @@ export class Game {
             }
             this.logger.info(`Removed ${username} from game`);
             // close the game if there's not enough players
-            if (Player.list.size < 2) setTimeout(() => this.stop('Not enough players'));
+            if (Player.list.size < (this.lobbyMode ? 1 : 2)) setTimeout(() => this.stop('Not enough players'));
         } else this.logger.warn(`Could not remove ${username} from game as player is not in game`);
     }
 

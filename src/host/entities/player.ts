@@ -39,15 +39,16 @@ export class Player extends Entity {
         };
 
     static readonly baseProperties: Readonly<Player['properties']> = {
-        gravity: 0.08,
-        movePower: 0.15,
-        jumpPower: 1.2,
-        wallJumpPower: 0.75,
-        airMovePower: 0.08,
-        drag: 0.85,
+        gravity: 0.07,
+        movePower: 0.3,
+        jumpPower: 1,
+        wallJumpPower: 0.8,
+        airMovePower: 0.04,
+        drag: 0.5,
         airDrag: 0.9,
         wallDrag: 0.5,
-        grip: 0.8
+        grip: 0.8,
+        fly: false
     };
     readonly properties: {
         gravity: number
@@ -59,6 +60,7 @@ export class Player extends Entity {
         airDrag: number
         wallDrag: number
         grip: number
+        fly: boolean
     } = {
             gravity: Player.baseProperties.gravity,
             movePower: Player.baseProperties.movePower,
@@ -68,7 +70,8 @@ export class Player extends Entity {
             drag: Player.baseProperties.drag,
             airDrag: Player.baseProperties.airDrag,
             wallDrag: Player.baseProperties.wallDrag,
-            grip: Player.baseProperties.grip
+            grip: Player.baseProperties.grip,
+            fly: Player.baseProperties.fly
         };
     readonly modifiers: Map<number, { modifier: Modifiers, length: number, activated: boolean }> = new Map();
 
@@ -145,6 +148,15 @@ export class Player extends Entity {
                 this.updateModifiers();
             }
         }
+        // flying moment
+        if (this.properties.fly) {
+            // flying just moves
+            this.vx = ((packet.inputs.right ? 1 : 0) - (packet.inputs.left ? 1 : 0)) * this.properties.movePower;
+            this.vy = ((packet.inputs.up ? 1 : 0) - (packet.inputs.down ? 1 : 0)) * this.properties.movePower;
+            // next position
+            this.nextPosition();
+            return;
+        }
         // movement
         //   drag is exponential decay base, always active when contacting map, friction becomes exponent
         //   grip is multiplier for intentional player movements, friction becomes coefficient
@@ -195,6 +207,12 @@ export class Player extends Entity {
         };
     }
 
+    /**
+     * Set the position of the player.
+     * @param x New X coordinate
+     * @param y New Y coordinate
+     * @param angle New angle
+     */
     setPosition(x: number, y: number, angle?: number): void {
         this.x = x;
         this.y = y;
@@ -202,12 +220,21 @@ export class Player extends Entity {
         this.calculateCollisionInfo();
     }
 
+    /**
+     * Set the velocity of the player.
+     * @param vx X-component of new velocity
+     * @param vy Y-component of new velocity
+     * @param va Angular velocity - **NOT FUNCTIONAL**
+     */
     setVelocity(vx: number, vy: number, va?: number): void {
         this.vx = vx;
         this.vy = vy;
         this.va = va ?? this.va;
     }
 
+    /**
+     * Teleports the player to a random spawnpoint on the map.
+     */
     toRandomSpawnpoint(): void {
         if (GameMap.current === undefined) {
             this.logger.error('Could not teleport to random spawnpoint because no map is loaded');
