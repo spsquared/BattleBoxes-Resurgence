@@ -32,10 +32,13 @@ export class Player extends Entity {
         fastTickInfractions: number
         /**Number of infractions for physics ticks being too far behind server */
         slowTickInfractions: number
+        /**Forces override player position on the next tick */
+        overrideNextTick: number
     } = {
             tick: 0,
             fastTickInfractions: 0,
             slowTickInfractions: 0,
+            overrideNextTick: 0
         };
 
     static readonly baseProperties: Readonly<Player['properties']> = {
@@ -114,6 +117,7 @@ export class Player extends Entity {
             this.clientPhysics.fastTickInfractions = Math.max(0, this.clientPhysics.fastTickInfractions - 1);
             this.clientPhysics.slowTickInfractions = Math.max(0, this.clientPhysics.slowTickInfractions - 1);
         }
+        if (this.clientPhysics.overrideNextTick > 0) this.clientPhysics.overrideNextTick--;
     }
 
     /**
@@ -195,6 +199,11 @@ export class Player extends Entity {
         this.vx += this.properties.gravity * this.sinVal;
         // move to next position
         this.nextPosition();
+        // corroborate positions
+        if (this.x != packet.position.endx || this.y != packet.position.endy) {
+            // counting infractions makes it easy for slight desync caused by teleports to kick players
+            this.clientPhysics.overrideNextTick = 2;
+        }
     }
 
     get tickData(): PlayerTickData {
@@ -203,7 +212,8 @@ export class Player extends Entity {
             username: this.username,
             color: this.color,
             properties: this.properties,
-            modifiers: Array.from(this.modifiers.entries(), ([id, mod]) => ({ id: id, modifier: mod.modifier, length: mod.length }))
+            modifiers: Array.from(this.modifiers.entries(), ([id, mod]) => ({ id: id, modifier: mod.modifier, length: mod.length })),
+            overridePosition: this.clientPhysics.overrideNextTick > 0
         };
     }
 
@@ -232,6 +242,16 @@ export class Player extends Entity {
         this.properties.airDrag = Player.baseProperties.airDrag;
         this.properties.wallDrag = Player.baseProperties.wallDrag;
         this.properties.grip = Player.baseProperties.grip;
+    }
+
+    setPosition(x: number, y: number, angle?: number): void {
+        super.setPosition(x, y, angle);
+        this.clientPhysics.overrideNextTick = 2;
+    }
+
+    setVelocity(vx: number, vy: number, va?: number): void {
+        super.setVelocity(vx, vy, va);
+        this.clientPhysics.overrideNextTick = 2;
     }
 
     /**
@@ -317,6 +337,11 @@ export interface PlayerTickInput {
         readonly up: boolean
         readonly down: boolean
     }
+    /**Position of player at end of tick (for verification of player position) */
+    readonly position: {
+        endx: number
+        endy: number
+    }
 }
 
 /**
@@ -327,6 +352,7 @@ export interface PlayerTickData extends EntityTickData {
     readonly color: string
     readonly properties: Player['properties']
     readonly modifiers: { id: number, modifier: Modifiers, length: number }[]
+    readonly overridePosition: boolean
 }
 
 /**

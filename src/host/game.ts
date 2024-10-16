@@ -91,7 +91,8 @@ export class Game {
             if (!validateStructure<PlayerTickInput>(packet, {
                 tick: 0,
                 modifiers: [0],
-                inputs: { left: false, right: false, up: false, down: false }
+                inputs: { left: false, right: false, up: false, down: false },
+                position: { endx: 0, endy: 0 }
             })) {
                 player.kick('malformed_tick_packet');
                 return;
