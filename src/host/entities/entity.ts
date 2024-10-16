@@ -17,7 +17,7 @@ export abstract class Entity implements Collidable {
      * **Small values cause inconsistent collisions!**
      */
     static readonly physicsResolution: number = config.gamePhysicsResolution;
-    static readonly physicsBuffer: number = 0.001;
+    static readonly physicsBuffer: number = 0.01;
 
     private static idCounter: number;
     readonly id: number;
@@ -100,8 +100,6 @@ export abstract class Entity implements Collidable {
             dx: this.vx / steps,
             dy: this.vy / steps
         };
-        const bufferX = Entity.physicsBuffer * Math.log2(this.x);
-        const bufferY = Entity.physicsBuffer * Math.log2(this.y);
         for (let i = step; i <= 1 && (pos.dx != 0 || pos.dy != 0); i += step) {
             pos.lx = pos.x;
             pos.ly = pos.y;
@@ -114,18 +112,18 @@ export abstract class Entity implements Collidable {
                     const col3 = this.collidesWithMap(pos.lx, pos.y);
                     if (col3 !== null) {
                         // stuck!
-                        pos.x = pos.lx = col3.x + (pos.x - col3.x < 0 ? -1 : 1) * (col3.halfBoundingWidth + this.halfBoundingWidth + bufferX);
-                        pos.y = pos.ly = col3.y + (pos.y - col3.y < 0 ? -1 : 1) * (col3.halfBoundingHeight + this.halfBoundingHeight + bufferY);
+                        pos.x = pos.lx;
+                        pos.y = pos.ly;
                         pos.dx = this.vx = 0;
                         pos.dy = this.vy = 0;
                     } else {
                         // vertical slide, snap to vertical face
-                        pos.x = pos.lx = col2.x + (pos.x - col2.x < 0 ? -1 : 1) * (col2.halfBoundingWidth + this.halfBoundingWidth + bufferX);
+                        pos.x = pos.lx = col2.x + (pos.x - col2.x < 0 ? -1 : 1) * (col2.halfBoundingWidth + this.halfBoundingWidth + Entity.physicsBuffer);
                         pos.dx = this.vx = 0;
                     }
                 } else {
                     // horizontal slide, snap to horizontal face
-                    pos.y = pos.ly = col1.y + (pos.y - col1.y < 0 ? -1 : 1) * (col1.halfBoundingHeight + this.halfBoundingHeight + bufferY);
+                    pos.y = pos.ly = col1.y + (pos.y - col1.y < 0 ? -1 : 1) * (col1.halfBoundingHeight + this.halfBoundingHeight + Entity.physicsBuffer);
                     pos.dy = this.vy = 0;
                 }
             }
@@ -134,12 +132,11 @@ export abstract class Entity implements Collidable {
         this.y = pos.y;
         this.angle += this.va;
         this.calculateCollisionInfo();
-        const shiftX = (1 + bufferX) / Entity.physicsResolution;
-        const shiftY = (1 + bufferY) / Entity.physicsResolution;
-        this.contactEdges.left = this.collidesWithMap(this.x - shiftX, this.y)?.friction ?? 0;
-        this.contactEdges.right = this.collidesWithMap(this.x + shiftX, this.y)?.friction ?? 0;
-        this.contactEdges.top = this.collidesWithMap(this.x, this.y + shiftY)?.friction ?? 0;
-        this.contactEdges.bottom = this.collidesWithMap(this.x, this.y - shiftY)?.friction ?? 0;
+        const shift = 1 / Entity.physicsResolution + Entity.physicsBuffer;
+        this.contactEdges.left = this.collidesWithMap(this.x - shift, this.y)?.friction ?? 0;
+        this.contactEdges.right = this.collidesWithMap(this.x + shift, this.y)?.friction ?? 0;
+        this.contactEdges.top = this.collidesWithMap(this.x, this.y + shift)?.friction ?? 0;
+        this.contactEdges.bottom = this.collidesWithMap(this.x, this.y - shift)?.friction ?? 0;
     }
 
     /**
