@@ -179,7 +179,7 @@ export class Player extends Entity {
         if (this.contactEdges.left * moveInput < 0 || this.contactEdges.right * moveInput > 0) {
             const friction = this.contactEdges.left + this.contactEdges.right;
             this.vy *= Math.pow(this.properties.wallDrag, friction);
-            if (packet.inputs.up || packet.inputs.down) {
+            if (packet.inputs.up || (packet.inputs.down && this.contactEdges.bottom == 0)) {
                 const jumpPower = this.properties.jumpPower * this.properties.grip * friction;
                 this.vx -= moveInput * jumpPower * this.properties.wallJumpPower;
                 if (packet.inputs.up) this.vy += jumpPower;
@@ -205,31 +205,6 @@ export class Player extends Entity {
             properties: this.properties,
             modifiers: Array.from(this.modifiers.entries(), ([id, mod]) => ({ id: id, modifier: mod.modifier, length: mod.length }))
         };
-    }
-
-    /**
-     * Set the position of the player.
-     * @param x New X coordinate
-     * @param y New Y coordinate
-     * @param angle New angle
-     */
-    setPosition(x: number, y: number, angle?: number): void {
-        this.x = x;
-        this.y = y;
-        this.angle = angle ?? this.angle;
-        this.calculateCollisionInfo();
-    }
-
-    /**
-     * Set the velocity of the player.
-     * @param vx X-component of new velocity
-     * @param vy Y-component of new velocity
-     * @param va Angular velocity - **NOT FUNCTIONAL**
-     */
-    setVelocity(vx: number, vy: number, va?: number): void {
-        this.vx = vx;
-        this.vy = vy;
-        this.va = va ?? this.va;
     }
 
     /**

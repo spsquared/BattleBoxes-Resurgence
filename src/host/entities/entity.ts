@@ -17,6 +17,7 @@ export abstract class Entity implements Collidable {
      * **Small values cause inconsistent collisions!**
      */
     static readonly physicsResolution: number = config.gamePhysicsResolution;
+    static readonly physicsBuffer: number = 0.001;
 
     private static idCounter: number;
     readonly id: number;
@@ -99,7 +100,8 @@ export abstract class Entity implements Collidable {
             dx: this.vx / steps,
             dy: this.vy / steps
         };
-        const collisionGap = 1.01;
+        const bufferX = Entity.physicsBuffer * Math.log2(this.x);
+        const bufferY = Entity.physicsBuffer * Math.log2(this.y);
         for (let i = step; i <= 1 && (pos.dx != 0 || pos.dy != 0); i += step) {
             pos.lx = pos.x;
             pos.ly = pos.y;
@@ -112,18 +114,18 @@ export abstract class Entity implements Collidable {
                     const col3 = this.collidesWithMap(pos.lx, pos.y);
                     if (col3 !== null) {
                         // stuck!
-                        pos.x = pos.lx = col3.x + (pos.x - col3.x < 0 ? -collisionGap : collisionGap) * (col3.halfBoundingWidth + this.halfBoundingWidth);
-                        pos.y = pos.ly = col3.y + (pos.y - col3.y < 0 ? -collisionGap : collisionGap) * (col3.halfBoundingHeight + this.halfBoundingHeight);
+                        pos.x = pos.lx = col3.x + (pos.x - col3.x < 0 ? -1 : 1) * (col3.halfBoundingWidth + this.halfBoundingWidth + bufferX);
+                        pos.y = pos.ly = col3.y + (pos.y - col3.y < 0 ? -1 : 1) * (col3.halfBoundingHeight + this.halfBoundingHeight + bufferY);
                         pos.dx = this.vx = 0;
                         pos.dy = this.vy = 0;
                     } else {
                         // vertical slide, snap to vertical face
-                        pos.x = pos.lx = col2.x + (pos.x - col2.x < 0 ? -collisionGap : collisionGap) * (col2.halfBoundingWidth + this.halfBoundingWidth);
+                        pos.x = pos.lx = col2.x + (pos.x - col2.x < 0 ? -1 : 1) * (col2.halfBoundingWidth + this.halfBoundingWidth + bufferX);
                         pos.dx = this.vx = 0;
                     }
                 } else {
                     // horizontal slide, snap to horizontal face
-                    pos.y = pos.ly = col1.y + (pos.y - col1.y < 0 ? -collisionGap : collisionGap) * (col1.halfBoundingHeight + this.halfBoundingHeight);
+                    pos.y = pos.ly = col1.y + (pos.y - col1.y < 0 ? -1 : 1) * (col1.halfBoundingHeight + this.halfBoundingHeight + bufferY);
                     pos.dy = this.vy = 0;
                 }
             }
@@ -132,11 +134,12 @@ export abstract class Entity implements Collidable {
         this.y = pos.y;
         this.angle += this.va;
         this.calculateCollisionInfo();
-        const invRes = 1 / Entity.physicsResolution;
-        this.contactEdges.left = this.collidesWithMap(this.x - invRes, this.y)?.friction ?? 0;
-        this.contactEdges.right = this.collidesWithMap(this.x + invRes, this.y)?.friction ?? 0;
-        this.contactEdges.top = this.collidesWithMap(this.x, this.y + invRes)?.friction ?? 0;
-        this.contactEdges.bottom = this.collidesWithMap(this.x, this.y - invRes)?.friction ?? 0;
+        const shiftX = (1 + bufferX) / Entity.physicsResolution;
+        const shiftY = (1 + bufferY) / Entity.physicsResolution;
+        this.contactEdges.left = this.collidesWithMap(this.x - shiftX, this.y)?.friction ?? 0;
+        this.contactEdges.right = this.collidesWithMap(this.x + shiftX, this.y)?.friction ?? 0;
+        this.contactEdges.top = this.collidesWithMap(this.x, this.y + shiftY)?.friction ?? 0;
+        this.contactEdges.bottom = this.collidesWithMap(this.x, this.y - shiftY)?.friction ?? 0;
     }
 
     /**
@@ -216,6 +219,31 @@ export abstract class Entity implements Collidable {
      */
     private static isWithin(p: Point, q: Point, r: Point): boolean {
         return q.x * (p.y - r.y) + p.x * (r.y - q.y) + r.x * (q.y - p.y) >= 0;
+    }
+
+    /**
+     * Set the position of the player.
+     * @param x New X coordinate
+     * @param y New Y coordinate
+     * @param angle New angle
+     */
+    setPosition(x: number, y: number, angle?: number): void {
+        this.x = x;
+        this.y = y;
+        this.angle = angle ?? this.angle;
+        this.calculateCollisionInfo();
+    }
+
+    /**
+     * Set the velocity of the player.
+     * @param vx X-component of new velocity
+     * @param vy Y-component of new velocity
+     * @param va Angular velocity - **NOT FUNCTIONAL**
+     */
+    setVelocity(vx: number, vy: number, va?: number): void {
+        this.vx = vx;
+        this.vy = vy;
+        this.va = va ?? this.va;
     }
 
     /**

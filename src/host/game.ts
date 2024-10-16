@@ -178,6 +178,7 @@ parentMessenger.on('playerConnect', (username: string) => {
     parentMessenger.emit(username + '/initPlayerPhysics', {
         tick: Entity.tick,
         physicsResolution: Entity.physicsResolution,
+        physicsBuffer: Entity.physicsBuffer,
         playerProperties: Player.baseProperties
     });
     const player = Player.list.get(username);
