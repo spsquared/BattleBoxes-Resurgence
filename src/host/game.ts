@@ -4,6 +4,7 @@ import { NamedLogger } from '@/common/log';
 
 import Entity from './entities/entity';
 import Player, { PlayerTickInput } from './entities/player';
+import Projectile from './entities/projectile';
 import { logger, parentMessenger, stopServer } from './host';
 import GameMap from './map';
 
@@ -74,8 +75,10 @@ export class Game {
         parentMessenger.emit('tick', {
             tick: Entity.tick,
             tps: metrics.tps.curr,
+            avgtps: metrics.tps.avg,
             map: GameMap.current?.name ?? '',
-            players: Player.nextTick()
+            players: Player.nextTick(),
+            projectiles: Projectile.nextTick()
         });
     }
 
@@ -91,7 +94,7 @@ export class Game {
             if (!validateStructure<PlayerTickInput>(packet, {
                 tick: 0,
                 modifiers: [0],
-                inputs: { left: false, right: false, up: false, down: false },
+                inputs: { left: false, right: false, up: false, down: false, primary: false, secondary: false, mouseAngle: 0 },
                 position: { endx: 0, endy: 0 }
             })) {
                 player.kick('malformed_tick_packet');
@@ -173,20 +176,26 @@ export class Game {
 }
 
 // events from socketio
+// emitted when a player first requests to join the game - Socket.IO connection not yet established
 parentMessenger.on('playerJoin', (user: AccountData) => Game.addPlayer(user));
+// emitted when a player's Socket.IO connection ends or fails to connect before timing out
 parentMessenger.on('playerLeave', (username: string, reason?: string) => Game.removePlayer(username, reason));
+// emitted when a player's Socket.IO connection is made (proceeding "ready" connection is acknowledging server "initPlayerPhysics")
 parentMessenger.on('playerConnect', (username: string) => {
     parentMessenger.emit(username + '/initPlayerPhysics', {
         tick: Entity.tick,
         physicsResolution: Entity.physicsResolution,
         physicsBuffer: Entity.physicsBuffer,
-        playerProperties: Player.baseProperties
+        playerProperties: Player.baseProperties,
+        projectileTypes: Projectile.typeVertices
     });
-    const player = Player.list.get(username);
-    if (player !== undefined) {
-        player.connected = true;
-        player.toRandomSpawnpoint();
-    }
+    parentMessenger.once(username + '/ready', () => {
+        const player = Player.list.get(username);
+        if (player !== undefined) {
+            player.connected = true;
+            player.toRandomSpawnpoint();
+        }
+    });
 });
 
 // load maps immediately and start ticking

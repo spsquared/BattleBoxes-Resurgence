@@ -19,7 +19,7 @@ export abstract class Entity implements Collidable {
     static readonly physicsResolution: number = config.gamePhysicsResolution;
     static readonly physicsBuffer: number = 0.01;
 
-    private static idCounter: number;
+    private static idCounter: number = 0;
     readonly id: number;
     x: number;
     y: number;
@@ -89,7 +89,13 @@ export abstract class Entity implements Collidable {
      * Note that translations are calculated first, then rotations.
      */
     nextPosition(): void {
-        this.calculateCollisionInfo();
+        this.contactEdges.left = this.contactEdges.right = this.contactEdges.top = this.contactEdges.bottom = 0;
+        if (!this.hasCollision) {
+            this.x += this.vx;
+            this.y += this.vy;
+            this.angle += this.va;
+            return;
+        }
         const steps = Math.max(Math.abs(this.vx), Math.abs(this.vy)) * Entity.physicsResolution;
         const step = 1 / steps;
         const pos = {
@@ -116,15 +122,22 @@ export abstract class Entity implements Collidable {
                         pos.y = pos.ly;
                         pos.dx = this.vx = 0;
                         pos.dy = this.vy = 0;
+                        this.contactEdges.left = this.contactEdges.right = this.contactEdges.top = this.contactEdges.bottom = col3.friction;
                     } else {
                         // vertical slide, snap to vertical face
-                        pos.x = pos.lx = col2.x + (pos.x - col2.x < 0 ? -1 : 1) * (col2.halfBoundingWidth + this.halfBoundingWidth + Entity.physicsBuffer);
+                        const dir = pos.x - col2.x < 0
+                        pos.x = pos.lx = col2.x + (dir ? -1 : 1) * (col2.halfBoundingWidth + this.halfBoundingWidth + Entity.physicsBuffer);
                         pos.dx = this.vx = 0;
+                        if (dir) this.contactEdges.right = col2.friction;
+                        else this.contactEdges.left = col2.friction;
                     }
                 } else {
                     // horizontal slide, snap to horizontal face
-                    pos.y = pos.ly = col1.y + (pos.y - col1.y < 0 ? -1 : 1) * (col1.halfBoundingHeight + this.halfBoundingHeight + Entity.physicsBuffer);
+                    const dir = pos.y - col1.y < 0;
+                    pos.y = pos.ly = col1.y + (dir ? -1 : 1) * (col1.halfBoundingHeight + this.halfBoundingHeight + Entity.physicsBuffer);
                     pos.dy = this.vy = 0;
+                    if (dir) this.contactEdges.top = col1.friction;
+                    else this.contactEdges.bottom = col1.friction;
                 }
             }
         }
@@ -132,11 +145,6 @@ export abstract class Entity implements Collidable {
         this.y = pos.y;
         this.angle += this.va;
         this.calculateCollisionInfo();
-        const shift = 1 / Entity.physicsResolution + Entity.physicsBuffer;
-        this.contactEdges.left = this.collidesWithMap(this.x - shift, this.y)?.friction ?? 0;
-        this.contactEdges.right = this.collidesWithMap(this.x + shift, this.y)?.friction ?? 0;
-        this.contactEdges.top = this.collidesWithMap(this.x, this.y + shift)?.friction ?? 0;
-        this.contactEdges.bottom = this.collidesWithMap(this.x, this.y - shift)?.friction ?? 0;
     }
 
     /**
@@ -287,7 +295,7 @@ export abstract class Entity implements Collidable {
      * Calculates essential values for collisions that would otherwise be redundantly calculated. MUST
      * be called after any angle, position, or size changes or some collisions will behave weirdly!
      */
-    calculateCollisionInfo() {
+    calculateCollisionInfo(): void {
         this.gridx = Math.floor(this.x);
         this.gridy = Math.floor(this.y);
         this.cosVal = Math.cos(this.angle);
@@ -345,7 +353,7 @@ export interface EntityTickData {
 }
 
 /**
- * A 2D point.
+ * A point in 2D space.
  */
 export interface Point {
     x: number

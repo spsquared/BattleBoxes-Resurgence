@@ -281,9 +281,9 @@ export class GameHostRunner {
             socket.disconnect();
         });
 
-        const sendEvents: string[] = ['initPlayerPhysics', 'pong'];
+        const sendEvents: string[] = ['pong', 'initPlayerPhysics'];
         const sendEventHandlers: (() => void)[] = [];
-        const receiveEvents: string[] = ['tick', 'ping'];
+        const receiveEvents: string[] = ['ping', 'ready', 'tick'];
         const receiveEventHandlers: (() => void)[] = [];
         for (const ev of sendEvents) {
             const handle = (...data: any[]) => socket.emit(ev, ...data);

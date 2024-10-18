@@ -4,7 +4,8 @@ import { NamedLogger } from '@/common/log';
 import { Game } from '../game';
 import { logger } from '../host';
 import GameMap from '../map';
-import Entity, { EntityTickData, Point } from './entity';
+import Entity, { EntityTickData } from './entity';
+import Projectile from './projectile';
 
 /**
  * Represents a player controlled by a client. Movement physics is performed by the client and server in
@@ -77,6 +78,27 @@ export class Player extends Entity {
             fly: Player.baseProperties.fly
         };
     readonly modifiers: Map<number, { modifier: Modifiers, length: number, activated: boolean }> = new Map();
+    static readonly baseMaxHp = 5;
+    maxHp: number = Player.baseMaxHp;
+    hp: number = Player.baseMaxHp;
+
+    readonly inputs: {
+        left: boolean
+        right: boolean
+        up: boolean
+        down: boolean
+        primary: boolean
+        secondary: boolean
+        mouseAngle: number
+    } = {
+        left: false,
+        right: false,
+        up: false,
+        down: false,
+        primary: false,
+        secondary: false,
+        mouseAngle: 0
+    }
 
     private static readonly colorList = ['#F00', '#F90', '#0F0', '#0FC', '#09F', '#00F', '#90F', '#F0F'];
     private static readonly usedColors: Set<string> = new Set();
@@ -94,8 +116,21 @@ export class Player extends Entity {
         Player.list.set(this.username, this);
     }
 
+    // temporary cooldown
+    cooldown: number = 0;
+
     tick() {
-        // check for lootboxes and stuff
+        // check for lootboxes
+
+        // use items
+        if (this.inputs.primary) {
+            // temporarily just make a projectile
+            if (this.cooldown <= 0) {
+                new Projectile('bullet', this, this.x, this.y, this.inputs.mouseAngle);
+                this.cooldown = 40;
+            }
+        }
+        this.cooldown--;
         // check for missed ticks and other infractions
         if (!this.connected) return;
         if (this.clientPhysics.tick - Entity.tick > Player.maxTickLead) {
@@ -129,6 +164,7 @@ export class Player extends Entity {
         const packet = p;
         // update tick
         this.clientPhysics.tick = packet.tick;
+        for (let i in this.inputs) this.inputs[i as keyof Player['inputs']] = packet.inputs[i as keyof Player['inputs']] as never;
         // tick simulation - should be identical to client (but will override client anyway)
         // update modifiers
         // tracks how many ticks of effect are remaining and corroborates with client array
@@ -182,7 +218,7 @@ export class Player extends Entity {
         const moveInput = ((packet.inputs.right ? 1 : 0) - (packet.inputs.left ? 1 : 0));
         if (this.contactEdges.left * moveInput < 0 || this.contactEdges.right * moveInput > 0) {
             const friction = this.contactEdges.left + this.contactEdges.right;
-            this.vy *= Math.pow(this.properties.wallDrag, friction);
+            if (this.vy < 0) this.vy *= Math.pow(this.properties.wallDrag, friction);
             if (packet.inputs.up || (packet.inputs.down && this.contactEdges.bottom == 0)) {
                 const jumpPower = this.properties.jumpPower * this.properties.grip * friction;
                 this.vx -= moveInput * jumpPower * this.properties.wallJumpPower;
@@ -203,18 +239,8 @@ export class Player extends Entity {
         if (this.x != packet.position.endx || this.y != packet.position.endy) {
             // counting infractions makes it easy for slight desync caused by teleports to kick players
             this.clientPhysics.overrideNextTick = 2;
+            this.logger.warn(`Physics discrepancy detected! Expected (${this.x}, ${this.y}) end position, got (${packet.position.endx}, ${packet.position.endy}) instead`);
         }
-    }
-
-    get tickData(): PlayerTickData {
-        return {
-            ...super.tickData,
-            username: this.username,
-            color: this.color,
-            properties: this.properties,
-            modifiers: Array.from(this.modifiers.entries(), ([id, mod]) => ({ id: id, modifier: mod.modifier, length: mod.length })),
-            overridePosition: this.clientPhysics.overrideNextTick > 0
-        };
     }
 
     /**
@@ -244,6 +270,15 @@ export class Player extends Entity {
         this.properties.grip = Player.baseProperties.grip;
     }
 
+    /**
+     * Damage the player by `d` hit points. Returns `true` if the damage kills the player.
+     * @param d Damage amount (negative amounts heal)
+     */
+    damage(d: number): boolean {
+        this.hp = Math.min(this.maxHp, Math.max(0, this.hp - d));
+        return this.hp == 0;
+    }
+
     setPosition(x: number, y: number, angle?: number): void {
         super.setPosition(x, y, angle);
         this.clientPhysics.overrideNextTick = 2;
@@ -252,6 +287,19 @@ export class Player extends Entity {
     setVelocity(vx: number, vy: number, va?: number): void {
         super.setVelocity(vx, vy, va);
         this.clientPhysics.overrideNextTick = 2;
+    }
+
+    get tickData(): PlayerTickData {
+        return {
+            ...super.tickData,
+            username: this.username,
+            color: this.color,
+            properties: this.properties,
+            modifiers: Array.from(this.modifiers.entries(), ([id, mod]) => ({ id: id, modifier: mod.modifier, length: mod.length })),
+            overridePosition: this.clientPhysics.overrideNextTick > 0,
+            hp: this.hp,
+            maxHp: this.maxHp
+        };
     }
 
     /**
@@ -331,12 +379,7 @@ export interface PlayerTickInput {
     /**List of modifier ID list for cross-checking with server */
     readonly modifiers: number[]
     /**All inputs being held for that tick */
-    readonly inputs: {
-        readonly left: boolean
-        readonly right: boolean
-        readonly up: boolean
-        readonly down: boolean
-    }
+    readonly inputs: Readonly<Player['inputs']>
     /**Position of player at end of tick (for verification of player position) */
     readonly position: {
         endx: number
@@ -353,6 +396,8 @@ export interface PlayerTickData extends EntityTickData {
     readonly properties: Player['properties']
     readonly modifiers: { id: number, modifier: Modifiers, length: number }[]
     readonly overridePosition: boolean
+    readonly hp: number
+    readonly maxHp: number
 }
 
 /**
