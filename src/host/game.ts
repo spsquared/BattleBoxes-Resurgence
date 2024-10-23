@@ -76,6 +76,8 @@ export class Game {
             tick: Entity.tick,
             tps: metrics.tps.curr,
             avgtps: metrics.tps.avg,
+            heapUsed: metrics.heap.used,
+            heapTotal: metrics.heap.total,
             map: GameMap.current?.name ?? '',
             players: Player.nextTick(),
             projectiles: Projectile.nextTick()
@@ -158,6 +160,7 @@ export class Game {
      * Contains performance metrics regarding server tickrate and timings.
      */
     static get metrics() {
+        const memUsage = process.memoryUsage();
         return {
             tps: {
                 curr: this.perfMetrics.tpsTimes.length,
@@ -170,6 +173,10 @@ export class Game {
                 avg: this.perfMetrics.tickTimes.reduce((p, c) => p + c, 0) / this.perfMetrics.tickTimes.length,
                 max: Math.max(...this.perfMetrics.tickTimes),
                 min: Math.min(...this.perfMetrics.tickTimes)
+            },
+            heap: {
+                used: memUsage.heapUsed / 1048576,
+                total: memUsage.heapTotal / 1048576
             }
         }
     }

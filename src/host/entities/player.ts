@@ -114,6 +114,7 @@ export class Player extends Entity {
         Player.usedColors.add(this.color);
         if (Player.list.has(this.username)) throw new Error(`Duplicate Player "${this.username}"!`);
         Player.list.set(this.username, this);
+        // this.angle = Math.PI / 3
     }
 
     // temporary cooldown
@@ -221,14 +222,26 @@ export class Player extends Entity {
             if (this.vy < 0) this.vy *= Math.pow(this.properties.wallDrag, friction);
             if (packet.inputs.up || (packet.inputs.down && this.contactEdges.bottom == 0)) {
                 const jumpPower = this.properties.jumpPower * this.properties.grip * friction;
-                this.vx -= moveInput * jumpPower * this.properties.wallJumpPower;
-                if (packet.inputs.up) this.vy += jumpPower;
+                const movePower = moveInput * jumpPower * this.properties.wallJumpPower;
+                this.vx -= movePower * this.cosVal;
+                this.vy += movePower * this.sinVal;
+                if (packet.inputs.up) {
+                    this.vy += jumpPower * this.cosVal;
+                    this.vx -= jumpPower * this.sinVal;
+                }
             }
         } else if (this.contactEdges.bottom != 0) {
-            this.vx += moveInput * this.properties.movePower * this.properties.grip * this.contactEdges.bottom;
-            if (packet.inputs.up) this.vy += this.properties.jumpPower;
+            const movePower = moveInput * this.properties.movePower * this.properties.grip * this.contactEdges.bottom
+            this.vx += movePower * this.cosVal;
+            this.vy += movePower * this.sinVal;
+            if (packet.inputs.up) {
+                this.vy += this.properties.jumpPower * this.cosVal;
+                this.vx -= this.properties.jumpPower * this.sinVal;
+            }
         } else {
-            this.vx += moveInput * this.properties.airMovePower;
+            const movePower = moveInput * this.properties.airMovePower;
+            this.vx += movePower * this.cosVal;
+            this.vy += movePower * this.sinVal;
         }
         // apply gravity with angle
         this.vy -= this.properties.gravity * this.cosVal;

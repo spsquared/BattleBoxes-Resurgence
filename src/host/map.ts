@@ -72,8 +72,12 @@ export class GameMap {
                         this.collisionGrid[y][x].push(...GameMap.tileset.collisionMaps[tile].map<MapCollision>((col) => ({
                             x: col.x + x,
                             y: col.y + y,
-                            halfBoundingWidth: col.halfBoundingWidth,
-                            halfBoundingHeight: col.halfBoundingHeight,
+                            boundingBox: {
+                                left: col.boundingBox.left + x,
+                                right: col.boundingBox.right + x,
+                                top: col.boundingBox.top + y,
+                                bottom: col.boundingBox.bottom + y,
+                            },
                             vertices: col.vertices.map((p) => ({ x: p.x + x, y: p.y + y })),
                             friction: col.friction
                         })));
@@ -154,8 +158,12 @@ export class GameTileset {
                 collisions.push({
                     x: x,
                     y: y,
-                    halfBoundingWidth: hw,
-                    halfBoundingHeight: hh,
+                    boundingBox: {
+                        left: x - hw,
+                        right: x + hw,
+                        top: y + hh,
+                        bottom: y - hh
+                    },
                     vertices: [
                         { x: x - hw, y: y + hh },
                         { x: x + hw, y: y + hh },
@@ -181,6 +189,8 @@ export class GameTileset {
  * Collision entity as part of map, with friction property
  */
 export interface MapCollision extends Collidable {
+    /**Absolute coordinates of axis-aligned rectangular bounding box - left/right are X, top/bottom are Y */
+    readonly boundingBox: Collidable['boundingBox']
     readonly friction: number;
 }
 

@@ -33,11 +33,12 @@ export abstract class Entity implements Collidable {
     gridy: number;
     cosVal: number = NaN;
     sinVal: number = NaN;
-    boundingWidth: number = NaN;
-    boundingHeight: number = NaN;
-    halfBoundingWidth: number = NaN;
-    halfBoundingHeight: number = NaN;
-    /**List of vertices going clockwise that make up a convex polygon to define the collision shape of the entity */
+    readonly boundingBox: Collidable['boundingBox'] = {
+        left: 0,
+        right: 0,
+        top: 0,
+        bottom: 0
+    };
     readonly vertices: Point[] = [];
     /**Friction coefficients of contact sides (along the axes), where zero is no friction or no contact */
     readonly contactEdges: {
@@ -123,18 +124,20 @@ export abstract class Entity implements Collidable {
                         pos.dx = this.vx = 0;
                         pos.dy = this.vy = 0;
                         this.contactEdges.left = this.contactEdges.right = this.contactEdges.top = this.contactEdges.bottom = col3.friction;
+                        break;
                     } else {
                         // vertical slide, snap to vertical face
-                        const dir = pos.x - col2.x < 0
-                        pos.x = pos.lx = col2.x + (dir ? -1 : 1) * (col2.halfBoundingWidth + this.halfBoundingWidth + Entity.physicsBuffer);
+                        const dir = pos.x < col2.x;
+                        // these are wrong
+                        pos.x = pos.lx = dir ? (col2.boundingBox.left - this.boundingBox.right - Entity.physicsBuffer) : (col2.boundingBox.right - this.boundingBox.left + Entity.physicsBuffer);
                         pos.dx = this.vx = 0;
                         if (dir) this.contactEdges.right = col2.friction;
                         else this.contactEdges.left = col2.friction;
                     }
                 } else {
                     // horizontal slide, snap to horizontal face
-                    const dir = pos.y - col1.y < 0;
-                    pos.y = pos.ly = col1.y + (dir ? -1 : 1) * (col1.halfBoundingHeight + this.halfBoundingHeight + Entity.physicsBuffer);
+                    const dir = pos.y < col1.y;
+                    pos.y = pos.ly = dir ? (col1.boundingBox.bottom - this.boundingBox.top - Entity.physicsBuffer) : (col1.boundingBox.top - this.boundingBox.bottom + Entity.physicsBuffer);
                     pos.dy = this.vy = 0;
                     if (dir) this.contactEdges.top = col1.friction;
                     else this.contactEdges.bottom = col1.friction;
@@ -145,6 +148,12 @@ export abstract class Entity implements Collidable {
         this.y = pos.y;
         this.angle += this.va;
         this.calculateCollisionInfo();
+        this.calculateCollisionInfo();
+        // const offset = 2 * Entity.physicsBuffer;
+        // this.contactEdges.top = this.contactEdges.top || (this.collidesWithMap(this.x, this.y + offset)?.friction ?? this.contactEdges.top);
+        // this.contactEdges.bottom = this.contactEdges.bottom || (this.collidesWithMap(this.x, this.y - offset)?.friction ?? this.contactEdges.bottom);
+        // this.contactEdges.left = this.contactEdges.left || (this.collidesWithMap(this.x - offset, this.y)?.friction ?? this.contactEdges.left);
+        // this.contactEdges.right = this.contactEdges.right || (this.collidesWithMap(this.x + offset, this.y)?.friction ?? this.contactEdges.right);
     }
 
     /**
@@ -156,17 +165,21 @@ export abstract class Entity implements Collidable {
      */
     collidesWithMap(x: number, y: number): MapCollision | null {
         if (GameMap.current === undefined) return null;
-        const sx = Math.max(Math.floor(x - this.halfBoundingWidth), 0);
-        const ex = Math.min(Math.ceil(x + this.halfBoundingWidth), GameMap.current.width - 1);
-        const sy = Math.max(Math.floor(y - this.halfBoundingHeight), 0);
-        const ey = Math.min(Math.ceil(y + this.halfBoundingHeight), GameMap.current.height - 1);
+        const sx = Math.max(Math.floor(x + this.boundingBox.left), 0);
+        const ex = Math.min(Math.ceil(x + this.boundingBox.right), GameMap.current.width - 1);
+        const sy = Math.max(Math.floor(y + this.boundingBox.bottom), 0);
+        const ey = Math.min(Math.ceil(y + this.boundingBox.top), GameMap.current.height - 1);
         const dx = x - this.x;
         const dy = y - this.y;
         const vertices = this.vertices.map((p) => ({ x: p.x + dx, y: p.y + dy }));
         for (let cy = sy; cy <= ey; cy++) {
             for (let cx = sx; cx <= ex; cx++) {
                 for (const col of GameMap.current.collisionGrid[cy][cx]) {
-                    if (Math.abs(x - col.x) > this.halfBoundingWidth + col.halfBoundingWidth || Math.abs(y - col.y) > this.halfBoundingHeight + col.halfBoundingHeight) {
+                    if (x + this.boundingBox.left > col.boundingBox.right
+                        || x + this.boundingBox.right < col.boundingBox.left
+                        || y + this.boundingBox.top < col.boundingBox.bottom
+                        || y + this.boundingBox.bottom > col.boundingBox.top
+                    ) {
                         continue;
                     }
                     for (const p of vertices) {
@@ -193,7 +206,11 @@ export abstract class Entity implements Collidable {
      * @returns If the entities are colliding
      */
     collidesWithEntity(that: Collidable): boolean {
-        if (Math.abs(this.x - that.x) > this.halfBoundingWidth + that.halfBoundingWidth || Math.abs(this.y - that.y) > this.halfBoundingHeight + that.halfBoundingHeight) {
+        if (this.x + this.boundingBox.left > that.x + this.boundingBox.right
+            || this.x + this.boundingBox.right < that.x + this.boundingBox.left
+            || this.y + this.boundingBox.top < that.y + this.boundingBox.bottom
+            || this.y + this.boundingBox.bottom > that.y + this.boundingBox.top
+        ) {
             return false;
         }
         for (const p of this.vertices) {
@@ -224,6 +241,27 @@ export abstract class Entity implements Collidable {
      */
     private static isWithin(p: Point, q: Point, r: Point): boolean {
         return q.x * (p.y - r.y) + p.x * (r.y - q.y) + r.x * (q.y - p.y) >= 0;
+    }
+
+    /**
+     * Calculates essential values for collisions that would otherwise be redundantly calculated. MUST
+     * be called after any angle, position, or size changes or some collisions will behave weirdly!
+     */
+    calculateCollisionInfo(): void {
+        this.gridx = Math.floor(this.x);
+        this.gridy = Math.floor(this.y);
+        this.cosVal = Math.cos(this.angle);
+        this.sinVal = Math.sin(this.angle);
+        this.boundingBox.right = (Math.abs(this.width * this.cosVal) + Math.abs(this.height * this.sinVal)) / 2;
+        this.boundingBox.left = -this.boundingBox.right;
+        this.boundingBox.top = (Math.abs(this.height * this.cosVal) + Math.abs(this.width * this.sinVal)) / 2;
+        this.boundingBox.bottom = -this.boundingBox.top;
+        const hWidth = this.width / 2;
+        const hHeight = this.height / 2;
+        this.vertices[0] = { x: this.x - this.cosVal * hWidth + this.sinVal * hHeight, y: this.y + this.cosVal * hWidth + this.sinVal * hHeight };
+        this.vertices[1] = { x: this.x + this.cosVal * hWidth + this.sinVal * hHeight, y: this.y + this.cosVal * hWidth + this.sinVal * hHeight };
+        this.vertices[2] = { x: this.x + this.cosVal * hWidth - this.sinVal * hHeight, y: this.y - this.cosVal * hWidth - this.sinVal * hHeight };
+        this.vertices[3] = { x: this.x - this.cosVal * hWidth - this.sinVal * hHeight, y: this.y - this.cosVal * hWidth - this.sinVal * hHeight };
     }
 
     /**
@@ -291,27 +329,6 @@ export abstract class Entity implements Collidable {
         return Math.max(Math.abs(this.gridx - ((that as Entity).gridx ?? that.x)), Math.abs(this.gridy - ((that as Entity).gridy ?? that.y)));
     }
 
-    /**
-     * Calculates essential values for collisions that would otherwise be redundantly calculated. MUST
-     * be called after any angle, position, or size changes or some collisions will behave weirdly!
-     */
-    calculateCollisionInfo(): void {
-        this.gridx = Math.floor(this.x);
-        this.gridy = Math.floor(this.y);
-        this.cosVal = Math.cos(this.angle);
-        this.sinVal = Math.sin(this.angle);
-        this.boundingWidth = Math.abs(this.width * this.cosVal) + Math.abs(this.height * this.sinVal);
-        this.boundingHeight = Math.abs(this.height * this.cosVal) + Math.abs(this.width * this.sinVal);
-        this.halfBoundingWidth = this.boundingWidth / 2;
-        this.halfBoundingHeight = this.boundingHeight / 2;
-        const hWidth = this.width / 2;
-        const hHeight = this.height / 2;
-        this.vertices[0] = { x: this.x - this.cosVal * hWidth + this.sinVal * hHeight, y: this.y + this.cosVal * hWidth + this.sinVal * hHeight };
-        this.vertices[1] = { x: this.x + this.cosVal * hWidth + this.sinVal * hHeight, y: this.y + this.cosVal * hWidth + this.sinVal * hHeight };
-        this.vertices[2] = { x: this.x + this.cosVal * hWidth - this.sinVal * hHeight, y: this.y - this.cosVal * hWidth - this.sinVal * hHeight };
-        this.vertices[3] = { x: this.x - this.cosVal * hWidth - this.sinVal * hHeight, y: this.y - this.cosVal * hWidth - this.sinVal * hHeight };
-    }
-
     get tickData(): EntityTickData {
         return {
             id: this.id,
@@ -364,10 +381,18 @@ export interface Point {
  * A convex polygon with a location and bounding box that can be checked for intersection with any `Entity`.
  */
 export interface Collidable {
-    x: number
-    y: number
-    halfBoundingWidth: number
-    halfBoundingHeight: number
+    /**X coordinate */
+    readonly x: number
+    /**Y coordinate */
+    readonly y: number
+    /**Relative coordinates of axis-aligned rectangular bounding box - left/right are X, top/bottom are Y */
+    readonly boundingBox: {
+        left: number
+        right: number
+        top: number
+        bottom: number
+    }
+    /**List of vertices going clockwise that make up a convex polygon to define the collision shape of the entity */
     readonly vertices: Point[]
 }
 

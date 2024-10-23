@@ -25,13 +25,13 @@ export class Projectile extends Entity {
      */
     static readonly types = {
         bullet: {
-            speed: 0.5,
+            speed: 0.8,
             angularSpeed: 0,
             vertices: [
-                { x: -0.125, y: -0.125 },
+                { x: -0.375, y: -0.125 },
                 { x: 0.125, y: -0.125 },
                 { x: 0.125, y: 0.125 },
-                { x: -0.125, y: 0.125 }
+                { x: -0.375, y: 0.125 }
             ],
             moveFunction: Projectile.moveFunctions.linear,
             onMapHit: function (this: Projectile) {
@@ -86,13 +86,16 @@ export class Projectile extends Entity {
         this.sinVal = Math.sin(this.angle);
         // calculateCollisionInfo is called in Entity constructor, so removing undefined check results in crash
         this.vertices.length = 0;
-        if (this.typeData !== undefined) this.vertices.push(...this.typeData.vertices.map((p) => ({ x: this.x + p.x * this.cosVal - p.y * this.sinVal, y: this.y + p.y * this.cosVal - p.x * this.sinVal })));
-        const xcoords = this.vertices.map((p) => p.x);
-        const ycoords = this.vertices.map((p) => p.y);
-        this.boundingWidth = Math.max(...xcoords) - Math.min(...xcoords);
-        this.boundingHeight = Math.max(...ycoords) - Math.min(...ycoords);
-        this.halfBoundingWidth = this.boundingWidth / 2;
-        this.halfBoundingHeight = this.boundingHeight / 2;
+        if (this.typeData !== undefined) this.vertices.push(...this.typeData.vertices.map((p) => ({
+            x: this.x + p.x * this.cosVal - p.y * this.sinVal,
+            y: this.y + p.y * this.cosVal - p.x * this.sinVal
+        })));
+        const xcoords = this.vertices.map((p) => p.x - this.x);
+        const ycoords = this.vertices.map((p) => p.y - this.y);
+        this.boundingBox.left = Math.min(...xcoords);
+        this.boundingBox.right + Math.max(...xcoords);
+        this.boundingBox.top = Math.max(...ycoords);
+        this.boundingBox.bottom + Math.min(...ycoords);
     }
 
     get tickData(): ProjectileTickData {
@@ -100,8 +103,7 @@ export class Projectile extends Entity {
             ...super.tickData,
             type: this.type,
             parent: this.parent.username,
-            halfBoundingWidth: this.halfBoundingWidth,
-            halfBoundingHeight: this.halfBoundingHeight
+            boundingBox: this.boundingBox
         };
     }
 
@@ -144,8 +146,7 @@ export interface ProjectileType {
 export interface ProjectileTickData extends EntityTickData {
     readonly type: keyof typeof Projectile.types
     readonly parent: string
-    readonly halfBoundingWidth: number
-    readonly halfBoundingHeight: number
+    readonly boundingBox: Projectile['boundingBox']
 }
 
 export default Projectile;
