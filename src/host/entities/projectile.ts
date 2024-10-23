@@ -28,10 +28,10 @@ export class Projectile extends Entity {
             speed: 0.8,
             angularSpeed: 0,
             vertices: [
-                { x: -0.375, y: -0.125 },
-                { x: 0.125, y: -0.125 },
+                { x: -0.375, y: 0.125 },
                 { x: 0.125, y: 0.125 },
-                { x: -0.375, y: 0.125 }
+                { x: 0.125, y: -0.125 },
+                { x: -0.375, y: -0.125 }
             ],
             moveFunction: Projectile.moveFunctions.linear,
             onMapHit: function (this: Projectile) {
@@ -88,14 +88,14 @@ export class Projectile extends Entity {
         this.vertices.length = 0;
         if (this.typeData !== undefined) this.vertices.push(...this.typeData.vertices.map((p) => ({
             x: this.x + p.x * this.cosVal - p.y * this.sinVal,
-            y: this.y + p.y * this.cosVal - p.x * this.sinVal
+            y: this.y + p.y * this.cosVal + p.x * this.sinVal
         })));
         const xcoords = this.vertices.map((p) => p.x - this.x);
         const ycoords = this.vertices.map((p) => p.y - this.y);
         this.boundingBox.left = Math.min(...xcoords);
-        this.boundingBox.right + Math.max(...xcoords);
+        this.boundingBox.right = Math.max(...xcoords);
         this.boundingBox.top = Math.max(...ycoords);
-        this.boundingBox.bottom + Math.min(...ycoords);
+        this.boundingBox.bottom = Math.min(...ycoords);
     }
 
     get tickData(): ProjectileTickData {

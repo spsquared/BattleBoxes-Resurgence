@@ -114,7 +114,6 @@ export class Player extends Entity {
         Player.usedColors.add(this.color);
         if (Player.list.has(this.username)) throw new Error(`Duplicate Player "${this.username}"!`);
         Player.list.set(this.username, this);
-        // this.angle = Math.PI / 3
     }
 
     // temporary cooldown

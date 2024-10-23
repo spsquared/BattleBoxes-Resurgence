@@ -13,6 +13,8 @@ import GameMap from './map';
  */
 export class Game {
     static readonly logger: NamedLogger = new NamedLogger(logger, 'Game');
+    private static readonly targetTps = 40;
+    private static readonly tickTiming = 1000 / Game.targetTps;
     private static running: boolean = true;
     private static runStart: number = 0;
     /**Lobby mode enables respawning and disables statistic trackers and points */
@@ -45,7 +47,7 @@ export class Game {
                 this.perfMetrics.tpsHist.shift();
                 this.perfMetrics.tickTimes.shift();
             }
-            await new Promise<void>((resolve) => setTimeout(resolve, 25 - end + start));
+            await new Promise<void>((resolve) => setTimeout(resolve, this.tickTiming - end + start));
         }
     }
 

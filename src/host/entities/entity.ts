@@ -258,10 +258,10 @@ export abstract class Entity implements Collidable {
         this.boundingBox.bottom = -this.boundingBox.top;
         const hWidth = this.width / 2;
         const hHeight = this.height / 2;
-        this.vertices[0] = { x: this.x - this.cosVal * hWidth + this.sinVal * hHeight, y: this.y + this.cosVal * hWidth + this.sinVal * hHeight };
-        this.vertices[1] = { x: this.x + this.cosVal * hWidth + this.sinVal * hHeight, y: this.y + this.cosVal * hWidth + this.sinVal * hHeight };
-        this.vertices[2] = { x: this.x + this.cosVal * hWidth - this.sinVal * hHeight, y: this.y - this.cosVal * hWidth - this.sinVal * hHeight };
-        this.vertices[3] = { x: this.x - this.cosVal * hWidth - this.sinVal * hHeight, y: this.y - this.cosVal * hWidth - this.sinVal * hHeight };
+        this.vertices[0] = { x: this.x - hWidth * this.cosVal - hHeight * this.sinVal, y: this.y + hHeight * this.cosVal - hWidth * this.sinVal };
+        this.vertices[0] = { x: this.x + hWidth * this.cosVal - hHeight * this.sinVal, y: this.y + hHeight * this.cosVal + hWidth * this.sinVal };
+        this.vertices[0] = { x: this.x + hWidth * this.cosVal + hHeight * this.sinVal, y: this.y - hHeight * this.cosVal + hWidth * this.sinVal };
+        this.vertices[0] = { x: this.x - hWidth * this.cosVal + hHeight * this.sinVal, y: this.y - hHeight * this.cosVal - hWidth * this.sinVal };
     }
 
     /**
