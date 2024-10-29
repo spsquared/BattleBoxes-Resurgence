@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs, { existsSync, readFileSync } from 'fs';
 import path from 'path';
 import { isMainThread, workerData } from 'worker_threads';
 
@@ -27,6 +27,14 @@ type ServerConfig = {
     readonly gameMaxBots: number
     /**Number of subunits to divide each grid unit into for movement physics - larger values are more accurate but slower. **Small values cause inconsistent collisions!** (default: 64) */
     readonly gamePhysicsResolution: number
+    /**Minimum amount of time in milliseconds between chat messages before a spam infraction is counted (default: 3000) */
+    readonly chatMinMillisPerMessage: number
+    /**Number of chat messages to allow consecutive violation of `chatMinSecondsPerMessage` before counting infractions (default: 2) */
+    readonly chatSpamGraceCount: number
+    /**Maximum number of spam or profanity infractions within one minute before player is kicked (default: 5) */
+    readonly chatMaxSpamPerMinute: number
+    /**Array of banned words in chat, found in `banned-words.csv` in the `CONFIG_PATH` directory - if blank no* words are banned */
+    readonly chatBannedWordList: string[]
     /**Enable debug logging (default: false) */
     readonly debugMode: boolean
     /**Marks the path of the directory the server is installed in. Same as the `BASE_PATH` environment variable (this cannot be edited in `config.json``) */
@@ -66,6 +74,7 @@ const getConfig = (): any => {
 };
 
 const fileConfig = getConfig();
+const bannedWordsSrc = path.resolve(process.env.CONFIG_PATH!, 'banned-words.csv');
 
 const ensureNumber = (input: any): number => {
     const n = Number(input);
@@ -84,19 +93,23 @@ const config: ServerConfig = isMainThread ? {
     maxConnectPerSecond: ensureNumber(fileConfig.maxConnectPerSecond ?? 5),
     maxSignupPerMinute: ensureNumber(fileConfig.maxSignupPerMinute ?? 1),
     rsaKeyRotateInterval: ensureNumber(fileConfig.rsaKeyRotateInterval ?? 86400000),
-    useFileDatabase: fileConfig.useFileDatabase ?? false,
+    useFileDatabase: (fileConfig.useFileDatabase ?? false) && true,
     tokenExpireTime: ensureNumber(fileConfig.tokenExpireTime ?? 360),
     sessionExpireTime: ensureNumber(fileConfig.sessionExpireTime ?? 60),
-    debugMode: process.argv.includes('debug_mode') ?? process.env.DEBUG_MODE ?? fileConfig.debugMode ?? false,
+    debugMode: (process.argv.includes('debug_mode') ?? process.env.DEBUG_MODE ?? fileConfig.debugMode ?? false) && true,
     gameConnectTimeout: ensureNumber(fileConfig.gameConnectTimeout ?? 10),
     gameMaxPlayers: ensureNumber(fileConfig.maxPlayers ?? 8),
     gameMaxBots: ensureNumber(fileConfig.maxBots ?? 5),
     gamePhysicsResolution: ensureNumber(fileConfig.gamePhysicsResolution ?? 64),
-    path: process.env.BASE_PATH as string,
-    scriptPath: process.env.SCRIPT_PATH as string,
-    gameSourcePath: fileConfig.gameSourcePath ?? process.env.GAME_SRC_PATH,
-    configPath: process.env.CONFIG_PATH as string,
-    logPath: process.env.LOG_PATH ?? fileConfig.logPath ?? path.resolve(__dirname, '../logs/'),
+    chatMinMillisPerMessage: ensureNumber(fileConfig.chatMinMillisPerMessage ?? 3000),
+    chatSpamGraceCount: ensureNumber(fileConfig.chatSpamGraceCount ?? 2),
+    chatMaxSpamPerMinute: ensureNumber(fileConfig.chatMaxSpamPerMinute ?? 5),
+    chatBannedWordList: existsSync(bannedWordsSrc) ? readFileSync(bannedWordsSrc, 'utf8').split(/[,\n]/).filter((s) => s.length > 0) : [],
+    path: process.env.BASE_PATH!,
+    scriptPath: process.env.SCRIPT_PATH!,
+    gameSourcePath: fileConfig.gameSourcePath ?? process.env.GAME_SRC_PATH!,
+    configPath: process.env.CONFIG_PATH!,
+    logPath: (process.env.LOG_PATH ?? fileConfig.logPath ?? path.resolve(__dirname, '../logs/')) + '',
 } satisfies ServerConfig : fileConfig;
 
 if (isMainThread) {

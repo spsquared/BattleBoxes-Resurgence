@@ -1,6 +1,7 @@
 import { NamedLogger } from '@/common/log';
 
 import { logger } from '../host';
+import GameMap from '../map';
 import Entity, { EntityTickData, Point } from './entity';
 import Player from './player';
 
@@ -51,6 +52,7 @@ export class Projectile extends Entity {
         map[id] = data.vertices;
         return map;
     }, {} as any);
+    static readonly outOfBoundsLimit = 20;
 
     readonly type: keyof typeof Projectile.types;
     readonly typeData: ProjectileType;
@@ -66,6 +68,10 @@ export class Projectile extends Entity {
     }
 
     tick() {
+        if (this.x < -Projectile.outOfBoundsLimit || this.x > (GameMap.current?.width ?? 0) + Projectile.outOfBoundsLimit || this.y < -Projectile.outOfBoundsLimit || this.y > (GameMap.current?.height ?? 0) + Projectile.outOfBoundsLimit) {
+            this.remove();
+            return;
+        }
         this.typeData.moveFunction.call(this);
         this.nextPosition();
         if (this.contactEdges.left || this.contactEdges.right || this.contactEdges.bottom || this.contactEdges.top) {
@@ -109,6 +115,9 @@ export class Projectile extends Entity {
 
     remove(): void {
         super.remove();
+        // sets velocity to 0 so client doesn't look weird
+        this.vx = 0;
+        this.vy = 0;
         Projectile.list.delete(this.id);
     }
 

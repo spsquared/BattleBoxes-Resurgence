@@ -30,6 +30,7 @@ config.json
 *.pem
 *.crt
 *.key
+banned-words.csv
 
 # Local database
 database.db

@@ -1,6 +1,9 @@
 import type { AccountData } from '@/common/database';
+import { doesContainBadWords, preprocessWordLists, textToLatin, unEmoji } from 'deep-profanity-filter';
+
 import { validateStructure } from '@/common/inputValidation';
 import { NamedLogger } from '@/common/log';
+import config from '@/config';
 
 import Entity from './entities/entity';
 import Player, { PlayerTickInput } from './entities/player';
@@ -8,11 +11,14 @@ import Projectile from './entities/projectile';
 import { logger, parentMessenger, stopServer } from './host';
 import GameMap from './map';
 
+import type { ChatMessageSection } from '@/hub/hostRunner';
 /**
  * Handles core game logic like points, rounds, and ticking.
  */
 export class Game {
     static readonly logger: NamedLogger = new NamedLogger(logger, 'Game');
+
+    static readonly profanityFilter = preprocessWordLists([...config.chatBannedWordList, 'gackie', 'gacky'], [], { checkCircumventions: true });
     private static readonly targetTps = 40;
     private static readonly tickTiming = 1000 / Game.targetTps;
     private static running: boolean = true;
@@ -87,7 +93,7 @@ export class Game {
     }
 
     /**
-     * Add a new player.
+     * Add a new player. Contains handlers for incoming packets and chat.
      * @param user User data to initialize player with
      */
     static addPlayer(user: AccountData): void {
@@ -111,10 +117,67 @@ export class Game {
         const pingName = player.username + '/pong';
         const ping = (t: number) => parentMessenger.emit(pingName, t);
         parentMessenger.on(player.username + '/ping', ping);
+        // chat
+        const chatInfractions = {
+            spam: 0,
+            profanity: 0,
+            lastMessage: 0,
+            decrementer: setInterval(() => {
+                chatInfractions.spam = 0;
+                chatInfractions.profanity = 0;
+            }, 60000)
+        };
+        // allow consecutive violation so "oh... buh" doesnt cause ban
+        const onChatMessage = (message: string) => {
+            if (typeof message != 'string' || message.length > 128 || message.length < 1) {
+                player.kick('malformed_chat_message');
+                return;
+            }
+            // very words
+            const now = performance.now();
+            if (now - chatInfractions.lastMessage < config.chatMinMillisPerMessage) {
+                chatInfractions.spam++;
+                if (chatInfractions.spam > config.chatSpamGraceCount) this.sendPrivateMessage([
+                    {
+                        text: 'Slow down! ',
+                        style: { fontStyle: 'italic', color: '#F00' }
+                    },
+                    {
+                        text: 'Your typing is too fast!',
+                        style: { fontStyle: 'italic' }
+                    }
+                ], player.username);
+            }
+            chatInfractions.lastMessage = now;
+            const latinatedMessage = textToLatin(unEmoji(message));
+            if (doesContainBadWords(latinatedMessage, this.profanityFilter)) {
+                chatInfractions.profanity++;
+                this.sendPrivateMessage({
+                    text: 'Chat message redacted for profanity',
+                    style: { fontStyle: 'italic', color: '#F00' }
+                }, player.username);
+            } else {
+                this.sendChatMessage([
+                    {
+                        text: player.username + ': ',
+                        style: { fontWeight: 'bold', color: player.color }
+                    },
+                    {
+                        text: latinatedMessage
+                    }
+                ]);
+            }
+            if (Math.max(0, chatInfractions.spam - config.chatSpamGraceCount) + chatInfractions.profanity > config.chatMaxSpamPerMinute) {
+                player.kick('chat_spam');
+            }
+        };
+        parentMessenger.on(player.username + '/chatMessage', onChatMessage);
         // prevent resource leak by removing listeners
         player.onRemoved(() => {
             parentMessenger.off(player.username + '/tick', onPhysicsTick);
             parentMessenger.off(player.username + '/ping', ping);
+            parentMessenger.off(player.username + '/chatMessage', onChatMessage);
+            clearInterval(chatInfractions.decrementer);
         });
     }
 
@@ -137,6 +200,23 @@ export class Game {
             // close the game if there's not enough players
             if (Player.list.size < (this.lobbyMode ? 1 : 2)) setTimeout(() => this.stop('Not enough players'));
         } else this.logger.warn(`Could not remove ${username} from game as player is not in game`);
+    }
+
+    /**
+     * Sends a message in public chat.
+     * @param message Single message text section or list of sections
+     */
+    static sendChatMessage(message: ChatMessageSection | ChatMessageSection[]): void {
+        parentMessenger.emit('chatMessage', message);
+    }
+
+    /**
+     * Sends a message in private chat to a specific player. Does not verify that the recipient exists.
+     * @param message Single message text section or list of sections
+     * @param target Username of recipient player
+     */
+    static sendPrivateMessage(message: ChatMessageSection | ChatMessageSection[], target: string): void {
+        parentMessenger.emit('privateMessage', message, target);
     }
 
     /**
@@ -203,6 +283,10 @@ parentMessenger.on('playerConnect', (username: string) => {
         if (player !== undefined) {
             player.connected = true;
             player.toRandomSpawnpoint();
+            parentMessenger.emit('chatMessage', {
+                text: `${player.username} joined the game`,
+                style: { fontWeight: 'bold', color: '#FD0' }
+            } satisfies ChatMessageSection);
         }
     });
 });

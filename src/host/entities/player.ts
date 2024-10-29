@@ -48,6 +48,7 @@ export class Player extends Entity {
         jumpPower: 1,
         wallJumpPower: 0.8,
         airMovePower: 0.04,
+        sneakDrag: 0.5,
         drag: 0.5,
         airDrag: 0.9,
         wallDrag: 0.5,
@@ -60,6 +61,7 @@ export class Player extends Entity {
         jumpPower: number
         wallJumpPower: number
         airMovePower: number
+        sneakDrag: number
         drag: number
         airDrag: number
         wallDrag: number
@@ -71,6 +73,7 @@ export class Player extends Entity {
             jumpPower: Player.baseProperties.jumpPower,
             wallJumpPower: Player.baseProperties.wallJumpPower,
             airMovePower: Player.baseProperties.airMovePower,
+            sneakDrag: Player.baseProperties.sneakDrag,
             drag: Player.baseProperties.drag,
             airDrag: Player.baseProperties.airDrag,
             wallDrag: Player.baseProperties.wallDrag,
@@ -127,12 +130,14 @@ export class Player extends Entity {
             // temporarily just make a projectile
             if (this.cooldown <= 0) {
                 new Projectile('bullet', this, this.x, this.y, this.inputs.mouseAngle);
-                this.cooldown = 40;
+                this.cooldown = 20;
             }
+            // for (let i = 0; i < 100; i++) {
+            //     new Projectile('bullet', this, this.x + Math.random() - 0.5, this.y + Math.random() - 0.5, Math.random() * 2 * Math.PI);
+            // }
         }
         this.cooldown--;
         // check for missed ticks and other infractions
-        if (!this.connected) return;
         if (this.clientPhysics.tick - Entity.tick > Player.maxTickLead) {
             this.clientPhysics.fastTickInfractions++;
             this.logger.warn(`Client ahead of server ticking by ${this.clientPhysics.tick - Entity.tick} ticks - ${Player.maxFastTickInfractions - this.clientPhysics.fastTickInfractions} violations remain`);
@@ -209,7 +214,10 @@ export class Player extends Entity {
         this.vy *= this.properties.airDrag;
         // apply velocity from inputs
         //   in air: air power movement, no jumps
-        //   on ground (bottom): full movement (power * grip * friction), normal jumps (power)
+        //   on ground (bottom): full movement 
+        //     apply sneak drag if down input
+        //     normal move power (power * grip * friction * sneak drag)
+        //     normal jumps (power)
         //   on walls (moving into side contacts): override normal movement
         //     persistent drag from wallslides (wallDrag) - drag ^ (friction * grip)
         //     up or down input activates wall jump - up jumps with move while down just moves
@@ -221,30 +229,18 @@ export class Player extends Entity {
             if (this.vy < 0) this.vy *= Math.pow(this.properties.wallDrag, friction);
             if (packet.inputs.up || (packet.inputs.down && this.contactEdges.bottom == 0)) {
                 const jumpPower = this.properties.jumpPower * this.properties.grip * friction;
-                const movePower = moveInput * jumpPower * this.properties.wallJumpPower;
-                this.vx -= movePower * this.cosVal;
-                this.vy += movePower * this.sinVal;
-                if (packet.inputs.up) {
-                    this.vy += jumpPower * this.cosVal;
-                    this.vx -= jumpPower * this.sinVal;
-                }
+                this.vx -= moveInput * jumpPower * this.properties.wallJumpPower;
+                if (packet.inputs.up) this.vy += jumpPower;
             }
         } else if (this.contactEdges.bottom != 0) {
-            const movePower = moveInput * this.properties.movePower * this.properties.grip * this.contactEdges.bottom
-            this.vx += movePower * this.cosVal;
-            this.vy += movePower * this.sinVal;
-            if (packet.inputs.up) {
-                this.vy += this.properties.jumpPower * this.cosVal;
-                this.vx -= this.properties.jumpPower * this.sinVal;
-            }
+            this.vx += moveInput * this.properties.movePower * this.properties.grip;
+            if (this.inputs.down) this.vx *= this.properties.sneakDrag;
+            if (packet.inputs.up) this.vy += this.properties.jumpPower;
         } else {
-            const movePower = moveInput * this.properties.airMovePower;
-            this.vx += movePower * this.cosVal;
-            this.vy += movePower * this.sinVal;
+            this.vx += moveInput * this.properties.airMovePower;
         }
         // apply gravity with angle
-        this.vy -= this.properties.gravity * this.cosVal;
-        this.vx += this.properties.gravity * this.sinVal;
+        this.vy -= this.properties.gravity;
         // move to next position
         this.nextPosition();
         // corroborate positions
@@ -355,7 +351,7 @@ export class Player extends Entity {
      * @returns Player tick data for clients
      */
     static nextTick(): PlayerTickData[] {
-        return Array.from(Player.list, ([username, player]) => {
+        return Array.from(Player.list).filter(([username, player]) => player.connected).map(([username, player]) => {
             player.tick();
             return player.tickData;
         });

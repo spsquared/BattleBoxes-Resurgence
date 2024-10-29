@@ -184,6 +184,10 @@ export class GameHostRunner {
             this.logger.info('Could not add player due to already being in game');
             return AccountOpResult.ALREADY_EXISTS;
         }
+        if (GameHostRunner.existingPlayers.has(username)) {
+            this.logger.info('Could not add player due to already being in other game');
+            return AccountOpResult.ALREADY_EXISTS;
+        }
         const userData = await this.db.getAccountData(username);
         if (typeof userData != 'object') {
             this.logger.error('Could not add player due to database error: ' + reverse_enum(AccountOpResult, userData))
@@ -217,7 +221,7 @@ export class GameHostRunner {
         else if (config.debugMode) this.logger.debug(`${username} left the game`);
         this.players.delete(username);
         GameHostRunner.existingPlayers.delete(username);
-        socket.emit('leave');
+        socket.emit('leave', reason);
         socket.disconnect();
         this.workerMessenger.emit('playerLeave', username, reason);
         return true;
@@ -238,7 +242,8 @@ export class GameHostRunner {
             const res = await this.db.updateAccountData(data);
             if (res != AccountOpResult.SUCCESS) this.logger.error('Failed to save player data: ' + reverse_enum(AccountOpResult, res));
         });
-        this.workerMessenger.on('broadcast', (message: ChatMessageSection | ChatMessageSection[]) => this.sendBroadcastChatMessage(message));
+        this.workerMessenger.on('chatMessage', (message: ChatMessageSection | ChatMessageSection[]) => this.sendChatMessage(message));
+        this.workerMessenger.on('privateMessage', (message: ChatMessageSection | ChatMessageSection[], target: string) => this.sendPrivateMessage(message, target));
     }
 
     /**
@@ -283,7 +288,7 @@ export class GameHostRunner {
 
         const sendEvents: string[] = ['pong', 'initPlayerPhysics'];
         const sendEventHandlers: (() => void)[] = [];
-        const receiveEvents: string[] = ['ping', 'ready', 'tick'];
+        const receiveEvents: string[] = ['ping', 'ready', 'tick', 'chatMessage'];
         const receiveEventHandlers: (() => void)[] = [];
         for (const ev of sendEvents) {
             const handle = (...data: any[]) => socket.emit(ev, ...data);
@@ -311,11 +316,21 @@ export class GameHostRunner {
         this.workerMessenger.emit('playerConnect', username);
     }
 
-    sendBroadcastChatMessage(message: ChatMessageSection | ChatMessageSection[]) {
-
+    /**
+     * Sends a message in public chat.
+     * @param message Single message text section or list of sections
+     */
+    sendChatMessage(message: ChatMessageSection | ChatMessageSection[]): void {
+        this.io.emit('chatMessage', Array.isArray(message) ? message : [message]);
     }
-    sendChatMessage(source: string, text: string) {
-        this.sendBroadcastChatMessage({ text: 'buh' })
+
+    /**
+     * Sends a message in private chat to a specific player. Does not verify that the recipient exists.
+     * @param message Single message text section or list of sections
+     * @param target Username of recipient player
+     */
+    sendPrivateMessage(message: ChatMessageSection | ChatMessageSection[], target: string): void {
+        this.io.to(target).emit('chatMessage', Array.isArray(message) ? message : [message]);
     }
 
     /**
@@ -372,6 +387,7 @@ export class GameHostRunner {
     }
 }
 
+/**User-configurable options for a game */
 export interface GameHostOptions {
     /**The maximum amount of players in the game - includes AI players */
     readonly maxPlayers: number
@@ -381,13 +397,18 @@ export interface GameHostOptions {
     readonly public: boolean
 }
 
+/**Describes a single section of a chat message */
 export interface ChatMessageSection {
-    text: string,
+    /**Text, will be interpreted as text and not HTML on clients (unless `trusted` is `true`) */
+    text: string
+    /**Optional text styling options */
     style?: {
         color?: string,
         fontWeight?: 'normal' | 'bold',
         fontStyle?: 'normal' | 'italic'
     }
+    /**Allows HTML contents in `test` */
+    trusted?: boolean
 }
 
 export default GameHostManager;
