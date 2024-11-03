@@ -14,8 +14,8 @@ Making maps:
   - Tileset goes to `tileset.json` under `game-resources/`
   - Maps go to `mapname.json` under `game-resources/maps` (`mapname` is the name of the map, no dots in name please!)
   - Tileset image must be stored under `game-resources/textures/tileset.png` (or any other format browsers can load)
-- Names of "above" layers (map layers that render on top of other entities) MUST start with "A"
-- Name of spawnpoints layer (defines spawnpoints for players and loot boxes) MUST be "Spawnpoints"
+- Names of "above" layers (map layers that render on top of other entities) MUST start with "A" (case insensitive)
+- Name of spawnpoints layer (defines spawnpoints for players and loot boxes) MUST be "Spawns" (case insensitive)
 - Spawnpoints are defined by the custom property "spawnpoint"
   - There must be at least `config.gameMaxPlayers` possible player spawnpoints (custom property value is "player")
   - Lootbox spawnpoints can be random ("lootbox="), positive random ("lootbox=+"), negative random ("lootbox=-"), or the id of the lootbox ("lootbox=`{id}`", where `{id}` is replaced by the id)

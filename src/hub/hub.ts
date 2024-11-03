@@ -24,7 +24,7 @@ logger.info('Starting server...');
 logger.debug('BASE_PATH: ' + config.path);
 logger.debug('GAME_SRC_PATH: ' + config.gameSourcePath);
 logger.debug('CONFIG_PATH: ' + config.configPath);
-logger.debug('Current config:\n' + JSON.stringify(config, null, 4), true);
+logger.debug('Current config:\n' + JSON.stringify({ ...config, chatBannedWordList: ['not shown'] }, null, 4), true);
 if (config.debugMode) logger.info('Extra debug logging is enabled (disable this if this is not a development environment!)');
 
 // set up networking

@@ -13,6 +13,7 @@ export class Projectile extends Entity {
     static readonly logger: NamedLogger = new NamedLogger(logger, 'Projectile');
 
     static readonly list: Map<number, Projectile> = new Map();
+    static readonly chunks: Map<number, Map<number, Set<Projectile>>> = new Map();
 
     /**
      * Default movement patterns for projectiles, called each tick on the projectile to move it.
@@ -78,10 +79,12 @@ export class Projectile extends Entity {
             this.typeData.onMapHit.call(this);
         }
         if (this.typeData.collidesWith.player) {
-            for (const player of Player.list.values()) if (this.collidesWithEntity(player) && player !== this.parent) this.typeData.onEntityHit.call(this, player);
+            const players = this.getInSameChunks(Player.chunks);
+            for (const player of players) if (player !== this.parent && this.collidesWithEntity(player)) this.typeData.onEntityHit.call(this, player);
         }
         if (this.typeData.collidesWith.projectile) {
-            for (const projectile of Projectile.list.values()) if (this.collidesWithEntity(projectile)) this.typeData.onEntityHit.call(this, projectile);
+            const projectiles = this.getInSameChunks(Projectile.chunks);
+            for (const projectile of projectiles) if (projectile !== this && this.collidesWithEntity(projectile)) this.typeData.onEntityHit.call(this, projectile);
         }
     }
 
@@ -102,6 +105,8 @@ export class Projectile extends Entity {
         this.boundingBox.right = Math.max(...xcoords);
         this.boundingBox.top = Math.max(...ycoords);
         this.boundingBox.bottom = Math.min(...ycoords);
+        this.updateChunkPosition(Entity.chunks);
+        this.updateChunkPosition(Projectile.chunks);
     }
 
     get tickData(): ProjectileTickData {
@@ -122,14 +127,18 @@ export class Projectile extends Entity {
     }
 
     /**
+     * Removes all projectiles.
+     */
+    static removeAll(): void {
+        for (const projectile of Projectile.list.values()) projectile.remove();
+    }
+
+    /**
      * Advances all projectiles to the next tick.
      * @returns Projectile tick data for clients
      */
     static nextTick(): ProjectileTickData[] {
-        return Array.from(Projectile.list, ([id, projectile]) => {
-            projectile.tick();
-            return projectile.tickData;
-        });
+        return Entity.tickList(Projectile.list.values());
     }
 }
 

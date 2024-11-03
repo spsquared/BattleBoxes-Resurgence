@@ -14,11 +14,14 @@ import { logger } from './host';
  */
 export class GameMap {
     static readonly maps: Map<string, GameMap> = new Map();
+    static readonly pools: Map<string, string[]> = new Map();
     static current?: GameMap = undefined;
     private static tileset: GameTileset | undefined;
 
     static readonly logger: NamedLogger = new NamedLogger(logger, 'GameMap');
 
+    readonly id: string;
+    readonly pool: string;
     readonly name: string;
     readonly width: number;
     readonly height: number;
@@ -30,19 +33,21 @@ export class GameMap {
      * @param json Raw JSON string from file
      * @param name Unique name/ID of map
      */
-    constructor(json: string, name: string) {
-        this.name = name;
-        if (config.debugMode) GameMap.logger.debug('Loading ' + this.name);
+    constructor(json: string, id: string) {
+        this.id = id;
+        if (config.debugMode) GameMap.logger.debug('Loading ' + this.id);
         const start = performance.now();
         const raw = JSON.parse(json);
         if (GameMap.tileset === undefined) throw new ReferenceError('Tileset was not loaded before map load');
+        this.pool = raw.properties?.find((prop: any) => prop.name == 'pool')?.value ?? 'default-pool';
+        this.name = raw.properties?.find((prop: any) => prop.name == 'name')?.value ?? this.id;
         this.width = raw.width;
         this.height = raw.height;
         this.collisionGrid = Array.from(new Array(this.height), () => Array.from(new Array(this.width), () => new Array()));
         // loop through every tile in every layer and add collisions/spawnpoints
         for (const layer of raw.layers) {
             if (layer.width != this.width || layer.height != this.height || layer.data.length != this.width * this.height) throw new RangeError('Mismatched layer size with map size or data length');
-            if (layer.name == 'Spawns') {
+            if (layer.name.toLowerCase() == 'spawns') {
                 // ensure minimum of gameMaxPlayers spawnpoints for spreading players
                 let playerSpawns = 0;
                 for (let i = 0; i < layer.data.length; i++) {
@@ -59,7 +64,7 @@ export class GameMap {
                         });
                     }
                 }
-                if (playerSpawns < config.gameMaxPlayers) GameMap.logger.error(`Map "${this.name}" has insufficient spawnpoints (min: ${config.gameMaxPlayers}, found: ${playerSpawns})`);
+                if (playerSpawns < config.gameMaxPlayers) GameMap.logger.error(`Map "${this.id}" has insufficient spawnpoints (min: ${config.gameMaxPlayers}, found: ${playerSpawns})`);
             } else {
                 // add collisions
                 for (let i = 0; i < layer.data.length; i++) {
@@ -67,7 +72,7 @@ export class GameMap {
                     const x = i % this.width;
                     const y = this.height - ~~(i / this.width) - 1;
                     if (GameMap.tileset.collisionMaps[tile] == undefined) {
-                        if (tile >= 0) GameMap.logger.error(`Tile with no collision map in "${this.name}" at (${x}, ${y}) - ${tile}`);
+                        if (tile >= 0) GameMap.logger.error(`Tile with no collision map in "${this.id}" at (${x}, ${y}) - ${tile}`);
                     } else if (GameMap.tileset.collisionMaps[tile].length > 0) {
                         this.collisionGrid[y][x].push(...GameMap.tileset.collisionMaps[tile].map<MapCollision>((col) => ({
                             x: col.x + x,
@@ -85,8 +90,11 @@ export class GameMap {
                 }
             }
         }
-        GameMap.maps.set(this.name, this);
-        if (config.debugMode) GameMap.logger.debug(`Loaded "${this.name}" in ${performance.now() - start}ms, size ${raw.width}x${raw.height}`, true);
+        GameMap.maps.set(this.id, this);
+        if (GameMap.pools.has(this.pool)) GameMap.pools.get(this.pool)!.push(this.id);
+        else GameMap.pools.set(this.pool, [this.id]);
+        GameMap.pools.get('all')!.push(this.id);
+        if (config.debugMode) GameMap.logger.debug(`Loaded "${this.id}" (display name "${this.name}", pool "${this.pool}") in ${performance.now() - start}ms, size ${raw.width}x${raw.height}`, true);
     }
 
     /**
@@ -99,12 +107,34 @@ export class GameMap {
             readFile(pathResolve(config.gameSourcePath, 'tileset.json'), { encoding: 'utf8' }),
             readdir(pathResolve(config.gameSourcePath, 'maps/')).then((mapsList) => Promise.all(mapsList.map(async (map) => [map, await readFile(pathResolve(config.gameSourcePath, 'maps/', map), { encoding: 'utf8' })])))
         ]);
-        this.logger.info('Maps found: ' + mapsJson.map(([name]) => name).join(', '))
+        this.logger.info('Maps found: ' + mapsJson.map(([id]) => id).join(', '))
         if (config.debugMode) this.logger.debug(`Read map data in ${performance.now() - start}ms`, true);
         this.maps.clear();
+        this.pools.clear();
+        this.pools.set('all', []);
         this.tileset = new GameTileset(tilesetJson);
-        for (const [name, json] of mapsJson) new GameMap(json, name.replace('.json', ''));
+        for (const [id, json] of mapsJson) new GameMap(json, id.replace('.json', ''));
         this.logger.info(`Loaded maps in ${performance.now() - start}ms`);
+    }
+
+    /**
+     * Sets the current map by map ID.
+     * @param id ID of map
+     * @returns If a map with matching ID exists (if `false` {@link GameMap.current} is `undefined`!)
+     */
+    static setMap(id: string): boolean {
+        return (GameMap.current = GameMap.maps.get(id)) !== undefined;
+    }
+
+    /**
+     * Returns a random map within a map pool if such a pool exists.
+     * @param pool Name/ID of pool
+     * @returns ID of map in pool or `undefined` if pool wasn't found
+     */
+    static randomMapInPool(pool: string): string | undefined {
+        const list = GameMap.pools.get(pool);
+        if (list === undefined) return undefined;
+        return list[Math.floor(Math.random() * list.length)];
     }
 }
 

@@ -8,7 +8,9 @@ import GameMap, { MapCollision } from '../map';
  * The generic `Entity` class that the physics engine will run on. Has basic movement and collisions.
  */
 export abstract class Entity implements Collidable {
-    static readonly logger: NamedLogger = new NamedLogger(logger, 'Player');
+    static readonly logger: NamedLogger = new NamedLogger(logger, 'Entity');
+
+    static readonly chunks: Map<number, Map<number, Set<Entity>>> = new Map();
 
     /**Global tick counter that increments for every tick */
     static tick: number = 0;
@@ -18,6 +20,7 @@ export abstract class Entity implements Collidable {
      */
     static readonly physicsResolution: number = config.gamePhysicsResolution;
     static readonly physicsBuffer: number = 0.01;
+    static readonly chunkSize: number = 8;
 
     private static idCounter: number = 0;
     readonly id: number;
@@ -31,6 +34,7 @@ export abstract class Entity implements Collidable {
     va: number;
     gridx: number;
     gridy: number;
+    chunk: { x1: number, x2: number, y1: number, y2: number };
     cosVal: number = NaN;
     sinVal: number = NaN;
     readonly boundingBox: Collidable['boundingBox'] = {
@@ -53,6 +57,7 @@ export abstract class Entity implements Collidable {
             bottom: 0
         };
     hasCollision: boolean = true;
+    allowOutOfBounds: boolean = true;
 
     /**
      * @param x Initial X position
@@ -73,8 +78,9 @@ export abstract class Entity implements Collidable {
         this.va = va ?? 0;
         this.vx = vx ?? 0;
         this.vy = vy ?? 0;
-        this.gridx = Math.floor(y);
+        this.gridx = Math.floor(x);
         this.gridy = Math.floor(y);
+        this.chunk = { x1: NaN, x2: NaN, y1: NaN, y2: NaN };
         this.calculateCollisionInfo();
     }
 
@@ -107,11 +113,22 @@ export abstract class Entity implements Collidable {
             dx: this.vx / steps,
             dy: this.vy / steps
         };
+        const mapBounds = {
+            x1: -this.boundingBox.left,
+            x2: (GameMap.current?.width ?? 1) - this.boundingBox.right,
+            y1: -this.boundingBox.bottom - 10,
+            y2: (GameMap.current?.height ?? 1) - this.boundingBox.top + 10,
+        };
         for (let i = step; i <= 1 && (pos.dx != 0 || pos.dy != 0); i += step) {
             pos.lx = pos.x;
             pos.ly = pos.y;
-            pos.x += pos.dx;
-            pos.y += pos.dy;
+            if (this.allowOutOfBounds) {
+                pos.x += pos.dx;
+                pos.y += pos.dy;
+            } else {
+                pos.x = Math.max(mapBounds.x1, Math.min(pos.x + pos.dx, mapBounds.x2));
+                pos.y = Math.max(mapBounds.y1, Math.min(pos.y + pos.dy, mapBounds.y2));
+            }
             const col1 = this.collidesWithMap(pos.x, pos.y);
             if (col1 !== null) {
                 const col2 = this.collidesWithMap(pos.x, pos.ly);
@@ -262,6 +279,62 @@ export abstract class Entity implements Collidable {
         this.vertices[0] = { x: this.x + hWidth * this.cosVal - hHeight * this.sinVal, y: this.y + hHeight * this.cosVal + hWidth * this.sinVal };
         this.vertices[0] = { x: this.x + hWidth * this.cosVal + hHeight * this.sinVal, y: this.y - hHeight * this.cosVal + hWidth * this.sinVal };
         this.vertices[0] = { x: this.x - hWidth * this.cosVal + hHeight * this.sinVal, y: this.y - hHeight * this.cosVal - hWidth * this.sinVal };
+        this.updateChunkPosition(Entity.chunks);
+    }
+
+    /**
+     * Update the chunks the entity is within.
+     * 
+     * **Note**: `chunkGrid` has no safeguard against putting a chunk
+     * grid of a subclass, which may cause issues not detectable by TypeScript.
+     * @param chunkGrid Map that chunks are stored in
+     */
+    updateChunkPosition(chunkGrid: Map<number, Map<number, Set<Entity>>>): void {
+        const chunks = chunkGrid;
+        const lastChunk = structuredClone(this.chunk);
+        this.chunk = {
+            x1: Math.floor(this.boundingBox.left / Entity.chunkSize),
+            x2: Math.floor(this.boundingBox.right / Entity.chunkSize),
+            y1: Math.floor(this.boundingBox.bottom / Entity.chunkSize),
+            y2: Math.floor(this.boundingBox.top / Entity.chunkSize)
+        };
+        if (this.chunk.x1 != lastChunk.x1 || this.chunk.x2 != lastChunk.x2 || this.chunk.x1 != lastChunk.x1 || this.chunk.x2 != lastChunk.x2) {
+            for (let i = lastChunk.y1; i <= lastChunk.y2; i++) {
+                const col = chunks.get(i);
+                if (col === undefined) continue;
+                for (let j = lastChunk.x1; j <= lastChunk.x2; j++) {
+                    // if (i >= this.chunk.y1 && i <= this.chunk.y2 && j >= this.chunk.x1 && j <= this.chunk.x2) continue;
+                    col.get(j)?.delete(this);
+                }
+            }
+            for (let i = this.chunk.y1; i <= this.chunk.y2; i++) {
+                const col = chunks.get(i);
+                if (col === undefined) continue;
+                for (let j = this.chunk.x1; j <= this.chunk.x2; j++) {
+                    // if (i >= lastChunk.y1 && i <= lastChunk.y2 && j >= lastChunk.x1 && j <= lastChunk.x2) continue;
+                    col.get(j)?.add(this);
+                }
+            }
+        }
+    }
+
+    /**
+     * Get a list of entities from a chunk grid that are within the same chunks.
+     * @param chunkGrid Map that chunks are stored in
+     * @returns Entity list
+     */
+    getInSameChunks<E extends Entity>(chunkGrid: Map<number, Map<number, Set<E>>>): E[] {
+        const chunks = chunkGrid;
+        const entities: E[] = [];
+        for (let i = this.chunk.y1; i <= this.chunk.y2; i++) {
+            const col = chunks.get(i);
+            if (col === undefined) continue;
+            for (let j = this.chunk.x1; j <= this.chunk.x2; j++) {
+                const l = col.get(j);
+                if (l != undefined) entities.push(...l);
+            }
+        }
+        return entities;
     }
 
     /**
@@ -353,6 +426,13 @@ export abstract class Entity implements Collidable {
     static nextTick(): EntityTickData[] {
         Entity.tick++;
         return [];
+    }
+
+    static tickList<E extends Entity>(list: Iterable<E>): E['tickData'][] {
+        return Array.from(list, (entity) => {
+            entity.tick();
+            return entity.tickData;
+        });
     }
 }
 

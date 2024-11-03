@@ -907,7 +907,7 @@
                      "y":4
                     }, 
                     {
-                     "height":8,
+                     "height":3,
                      "id":2,
                      "name":"",
                      "properties":[
@@ -921,7 +921,7 @@
                      "visible":true,
                      "width":2,
                      "x":3,
-                     "y":0
+                     "y":5
                     }, 
                     {
                      "height":4,
@@ -973,7 +973,7 @@
                      "y":4
                     }, 
                     {
-                     "height":8,
+                     "height":3,
                      "id":2,
                      "name":"",
                      "properties":[
@@ -987,7 +987,7 @@
                      "visible":true,
                      "width":2,
                      "x":6,
-                     "y":0
+                     "y":5
                     }, 
                     {
                      "height":4,
@@ -1039,7 +1039,7 @@
                      "y":4
                     }, 
                     {
-                     "height":8,
+                     "height":3,
                      "id":2,
                      "name":"",
                      "properties":[
@@ -1053,7 +1053,7 @@
                      "visible":true,
                      "width":2,
                      "x":0,
-                     "y":0
+                     "y":5
                     }, 
                     {
                      "height":4,
@@ -1244,7 +1244,7 @@
              "name":"",
              "objects":[
                     {
-                     "height":8,
+                     "height":2,
                      "id":2,
                      "name":"",
                      "properties":[
@@ -1261,7 +1261,7 @@
                      "y":0
                     }, 
                     {
-                     "height":6,
+                     "height":2,
                      "id":3,
                      "name":"",
                      "properties":[
@@ -1310,7 +1310,7 @@
              "name":"",
              "objects":[
                     {
-                     "height":6,
+                     "height":2,
                      "id":3,
                      "name":"",
                      "properties":[
@@ -1327,7 +1327,7 @@
                      "y":2
                     }, 
                     {
-                     "height":8,
+                     "height":2,
                      "id":2,
                      "name":"",
                      "properties":[
@@ -1376,7 +1376,7 @@
              "name":"",
              "objects":[
                     {
-                     "height":6,
+                     "height":2,
                      "id":3,
                      "name":"",
                      "properties":[
@@ -1393,7 +1393,7 @@
                      "y":2
                     }, 
                     {
-                     "height":8,
+                     "height":2,
                      "id":2,
                      "name":"",
                      "properties":[
@@ -1663,6 +1663,70 @@
                 }]
         }, 
         {
+         "id":59,
+         "objectgroup":
+            {
+             "draworder":"index",
+             "id":2,
+             "name":"",
+             "objects":[
+                    {
+                     "height":4,
+                     "id":1,
+                     "name":"",
+                     "properties":[
+                            {
+                             "name":"friction",
+                             "type":"float",
+                             "value":1
+                            }],
+                     "rotation":0,
+                     "type":"",
+                     "visible":true,
+                     "width":8,
+                     "x":0,
+                     "y":4
+                    }],
+             "opacity":1,
+             "type":"objectgroup",
+             "visible":true,
+             "x":0,
+             "y":0
+            }
+        }, 
+        {
+         "id":60,
+         "objectgroup":
+            {
+             "draworder":"index",
+             "id":2,
+             "name":"",
+             "objects":[
+                    {
+                     "height":4,
+                     "id":1,
+                     "name":"",
+                     "properties":[
+                            {
+                             "name":"friction",
+                             "type":"float",
+                             "value":1
+                            }],
+                     "rotation":0,
+                     "type":"",
+                     "visible":true,
+                     "width":8,
+                     "x":0,
+                     "y":4
+                    }],
+             "opacity":1,
+             "type":"objectgroup",
+             "visible":true,
+             "x":0,
+             "y":0
+            }
+        }, 
+        {
          "id":63,
          "properties":[
                 {
@@ -1670,6 +1734,70 @@
                  "type":"string",
                  "value":"lootbox=-"
                 }]
+        }, 
+        {
+         "id":68,
+         "objectgroup":
+            {
+             "draworder":"index",
+             "id":2,
+             "name":"",
+             "objects":[
+                    {
+                     "height":8,
+                     "id":1,
+                     "name":"",
+                     "properties":[
+                            {
+                             "name":"friction",
+                             "type":"float",
+                             "value":1
+                            }],
+                     "rotation":0,
+                     "type":"",
+                     "visible":true,
+                     "width":4,
+                     "x":2,
+                     "y":0
+                    }],
+             "opacity":1,
+             "type":"objectgroup",
+             "visible":true,
+             "x":0,
+             "y":0
+            }
+        }, 
+        {
+         "id":69,
+         "objectgroup":
+            {
+             "draworder":"index",
+             "id":2,
+             "name":"",
+             "objects":[
+                    {
+                     "height":4,
+                     "id":1,
+                     "name":"",
+                     "properties":[
+                            {
+                             "name":"friction",
+                             "type":"float",
+                             "value":1
+                            }],
+                     "rotation":0,
+                     "type":"",
+                     "visible":true,
+                     "width":8,
+                     "x":0,
+                     "y":2
+                    }],
+             "opacity":1,
+             "type":"objectgroup",
+             "visible":true,
+             "x":0,
+             "y":0
+            }
         }, 
         {
          "id":73,
@@ -1791,6 +1919,70 @@
                      "width":8,
                      "x":0,
                      "y":0
+                    }],
+             "opacity":1,
+             "type":"objectgroup",
+             "visible":true,
+             "x":0,
+             "y":0
+            }
+        }, 
+        {
+         "id":77,
+         "objectgroup":
+            {
+             "draworder":"index",
+             "id":2,
+             "name":"",
+             "objects":[
+                    {
+                     "height":8,
+                     "id":1,
+                     "name":"",
+                     "properties":[
+                            {
+                             "name":"friction",
+                             "type":"float",
+                             "value":1
+                            }],
+                     "rotation":0,
+                     "type":"",
+                     "visible":true,
+                     "width":8,
+                     "x":0,
+                     "y":0
+                    }],
+             "opacity":1,
+             "type":"objectgroup",
+             "visible":true,
+             "x":0,
+             "y":0
+            }
+        }, 
+        {
+         "id":78,
+         "objectgroup":
+            {
+             "draworder":"index",
+             "id":2,
+             "name":"",
+             "objects":[
+                    {
+                     "height":6,
+                     "id":1,
+                     "name":"",
+                     "properties":[
+                            {
+                             "name":"friction",
+                             "type":"float",
+                             "value":1
+                            }],
+                     "rotation":0,
+                     "type":"",
+                     "visible":true,
+                     "width":6,
+                     "x":1,
+                     "y":2
                     }],
              "opacity":1,
              "type":"objectgroup",

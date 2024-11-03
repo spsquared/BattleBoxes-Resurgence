@@ -143,12 +143,7 @@ export const addClientRoutes = (expapp: Express, db: Database, hosts: GameHostMa
 
     // creating/joining games
     app.get('/games/gameList', authentication, (req, res) => {
-        const games = hostManager.getGames(true).map((host) => ({
-            id: host.id,
-            host: host.hostUser,
-            options: host.options,
-            playerCount: host.playerCount
-        }));
+        const games = hostManager.getGames(true).map((host) => host.gameInfo);
         res.json(games);
     });
     app.post('/games/joinGame/:gameId', authentication, bodyParser.json(), captchaCheck, async (req, res) => {

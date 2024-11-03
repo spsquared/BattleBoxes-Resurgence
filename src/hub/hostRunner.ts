@@ -93,6 +93,7 @@ export class GameHostRunner {
     private readonly db: Database;
     private readonly logger: NamedLogger;
     private readonly hostLogger: NamedLogger;
+    private readonly chatLogger: NamedLogger;
     private readonly players: Map<string, SocketIOSocket> = new Map();
     hostUser: string;
     readonly options: GameHostOptions;
@@ -123,6 +124,7 @@ export class GameHostRunner {
         this.db = db;
         this.logger = new NamedLogger(logger, 'GameHostRunner-' + this.id);
         this.hostLogger = new NamedLogger(logger, 'HostThread-' + this.id);
+        this.chatLogger = new NamedLogger(logger, 'Chat-' + this.id);
         this.hostUser = hostUsername;
         this.options = options;
         this.logger.info('Creating host thread');
@@ -195,6 +197,7 @@ export class GameHostRunner {
         }
         await this.readyPromise;
         this.workerMessenger.emit('playerJoin', userData);
+        // authentication codes will eventually time out to prevent an easy DOS by spamming joins
         const authCode = randomSecureUUID();
         this.authCodes.set(authCode, username);
         if (config.debugMode) this.logger.debug(`Authentication code "${authCode}" generated for ${username}`, true);
@@ -205,6 +208,7 @@ export class GameHostRunner {
                 this.workerMessenger.emit('playerLeave', username);
             }
         }, config.gameConnectTimeout * 1000);
+        this.broadcastGameInfo();
         return authCode;
     }
 
@@ -224,11 +228,27 @@ export class GameHostRunner {
         socket.emit('leave', reason);
         socket.disconnect();
         this.workerMessenger.emit('playerLeave', username, reason);
+        this.broadcastGameInfo();
         return true;
     }
 
-    get playerCount() {
+    /**
+     * The total number of players, excluding AI players.
+     */
+    get playerCount(): number {
         return this.players.size;
+    }
+
+    /**
+     * Game information as presented on clients.
+     */
+    get gameInfo(): GameHostOptions & { readonly id: string, readonly host: string, readonly players: number } {
+        return {
+            ...this.options,
+            id: this.id,
+            host: this.hostUser,
+            players: this.playerCount
+        };
     }
 
     /**
@@ -279,6 +299,7 @@ export class GameHostRunner {
         socket.join(username);
         this.players.set(username, socket);
         if (config.debugMode) this.logger.debug(`${username} connected`);
+        this.broadcastGameInfo();
 
         // not this time!!!
         socket.on('error', () => {
@@ -286,6 +307,7 @@ export class GameHostRunner {
             socket.disconnect();
         });
 
+        // forward events
         const sendEvents: string[] = ['pong', 'initPlayerPhysics'];
         const sendEventHandlers: (() => void)[] = [];
         const receiveEvents: string[] = ['ping', 'ready', 'tick', 'chatMessage'];
@@ -316,12 +338,18 @@ export class GameHostRunner {
         this.workerMessenger.emit('playerConnect', username);
     }
 
+    private broadcastGameInfo(): void {
+        this.io.emit('gameInfo', this.gameInfo);
+    }
+
     /**
      * Sends a message in public chat.
      * @param message Single message text section or list of sections
      */
     sendChatMessage(message: ChatMessageSection | ChatMessageSection[]): void {
-        this.io.emit('chatMessage', Array.isArray(message) ? message : [message]);
+        const sections = Array.isArray(message) ? message : [message];
+        this.io.emit('chatMessage', sections);
+        this.chatLogger.info(sections.reduce((p, c) => p + c.text, ''), true);
     }
 
     /**
@@ -330,7 +358,9 @@ export class GameHostRunner {
      * @param target Username of recipient player
      */
     sendPrivateMessage(message: ChatMessageSection | ChatMessageSection[], target: string): void {
-        this.io.to(target).emit('chatMessage', Array.isArray(message) ? message : [message]);
+        const sections = Array.isArray(message) ? message : [message];
+        this.io.emit('chatMessage', sections);
+        this.chatLogger.info(`[PM -> ${target}] ${sections.reduce((p, c) => p + c.text, '')}`, true);
     }
 
     /**

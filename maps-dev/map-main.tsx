@@ -258,7 +258,7 @@
      <property name="friction" type="float" value="1"/>
     </properties>
    </object>
-   <object id="2" x="3" y="0" width="2" height="8">
+   <object id="2" x="3" y="5" width="2" height="3">
     <properties>
      <property name="friction" type="float" value="1"/>
     </properties>
@@ -277,7 +277,7 @@
      <property name="friction" type="float" value="1"/>
     </properties>
    </object>
-   <object id="2" x="6" y="0" width="2" height="8">
+   <object id="2" x="6" y="5" width="2" height="3">
     <properties>
      <property name="friction" type="float" value="1"/>
     </properties>
@@ -296,7 +296,7 @@
      <property name="friction" type="float" value="1"/>
     </properties>
    </object>
-   <object id="2" x="0" y="0" width="2" height="8">
+   <object id="2" x="0" y="5" width="2" height="3">
     <properties>
      <property name="friction" type="float" value="1"/>
     </properties>
@@ -357,12 +357,12 @@
  </tile>
  <tile id="37">
   <objectgroup draworder="index" id="2">
-   <object id="2" x="3" y="0" width="2" height="8">
+   <object id="2" x="3" y="0" width="2" height="2">
     <properties>
      <property name="friction" type="float" value="1"/>
     </properties>
    </object>
-   <object id="3" x="1" y="2" width="6" height="6">
+   <object id="3" x="1" y="2" width="6" height="2">
     <properties>
      <property name="friction" type="float" value="1"/>
     </properties>
@@ -376,12 +376,12 @@
  </tile>
  <tile id="38">
   <objectgroup draworder="index" id="2">
-   <object id="3" x="3" y="2" width="5" height="6">
+   <object id="3" x="3" y="2" width="5" height="2">
     <properties>
      <property name="friction" type="float" value="1"/>
     </properties>
    </object>
-   <object id="2" x="6" y="0" width="2" height="8">
+   <object id="2" x="6" y="0" width="2" height="2">
     <properties>
      <property name="friction" type="float" value="1"/>
     </properties>
@@ -395,12 +395,12 @@
  </tile>
  <tile id="39">
   <objectgroup draworder="index" id="2">
-   <object id="3" x="0" y="2" width="5" height="6">
+   <object id="3" x="0" y="2" width="5" height="2">
     <properties>
      <property name="friction" type="float" value="1"/>
     </properties>
    </object>
-   <object id="2" x="0" y="0" width="2" height="8">
+   <object id="2" x="0" y="0" width="2" height="2">
     <properties>
      <property name="friction" type="float" value="1"/>
     </properties>
@@ -482,10 +482,46 @@
    <property name="spawnpoint" value="lootbox=+"/>
   </properties>
  </tile>
+ <tile id="59">
+  <objectgroup draworder="index" id="2">
+   <object id="1" x="0" y="4" width="8" height="4">
+    <properties>
+     <property name="friction" type="float" value="1"/>
+    </properties>
+   </object>
+  </objectgroup>
+ </tile>
+ <tile id="60">
+  <objectgroup draworder="index" id="2">
+   <object id="1" x="0" y="4" width="8" height="4">
+    <properties>
+     <property name="friction" type="float" value="1"/>
+    </properties>
+   </object>
+  </objectgroup>
+ </tile>
  <tile id="63">
   <properties>
    <property name="spawnpoint" value="lootbox=-"/>
   </properties>
+ </tile>
+ <tile id="68">
+  <objectgroup draworder="index" id="2">
+   <object id="1" x="2" y="0" width="4" height="8">
+    <properties>
+     <property name="friction" type="float" value="1"/>
+    </properties>
+   </object>
+  </objectgroup>
+ </tile>
+ <tile id="69">
+  <objectgroup draworder="index" id="2">
+   <object id="1" x="0" y="2" width="8" height="4">
+    <properties>
+     <property name="friction" type="float" value="1"/>
+    </properties>
+   </object>
+  </objectgroup>
  </tile>
  <tile id="73">
   <objectgroup draworder="index" id="2">
@@ -517,6 +553,24 @@
  <tile id="76">
   <objectgroup draworder="index" id="2">
    <object id="1" x="0" y="0" width="8" height="4">
+    <properties>
+     <property name="friction" type="float" value="1"/>
+    </properties>
+   </object>
+  </objectgroup>
+ </tile>
+ <tile id="77">
+  <objectgroup draworder="index" id="2">
+   <object id="1" x="0" y="0" width="8" height="8">
+    <properties>
+     <property name="friction" type="float" value="1"/>
+    </properties>
+   </object>
+  </objectgroup>
+ </tile>
+ <tile id="78">
+  <objectgroup draworder="index" id="2">
+   <object id="1" x="1" y="2" width="6" height="6">
     <properties>
      <property name="friction" type="float" value="1"/>
     </properties>

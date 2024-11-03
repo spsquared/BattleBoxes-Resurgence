@@ -16,6 +16,7 @@ export class Player extends Entity {
     static readonly logger: NamedLogger = new NamedLogger(logger, 'Player');
 
     static readonly list: Map<string, Player> = new Map();
+    static readonly chunks: Map<number, Map<number, Set<Player>>> = new Map();
 
     private static readonly maxFastTickInfractions = 10;
     private static readonly maxSlowTickInfractions = 20;
@@ -115,6 +116,7 @@ export class Player extends Entity {
         this.accountData = data;
         this.color = Player.colorList.find((c) => !Player.usedColors.has(c)) ?? '#A07';
         Player.usedColors.add(this.color);
+        this.allowOutOfBounds = false;
         if (Player.list.has(this.username)) throw new Error(`Duplicate Player "${this.username}"!`);
         Player.list.set(this.username, this);
     }
@@ -137,6 +139,12 @@ export class Player extends Entity {
             // }
         }
         this.cooldown--;
+
+        // void check
+        if (this.y < -5) {
+            this.damage(Infinity);
+        }
+
         // check for missed ticks and other infractions
         if (this.clientPhysics.tick - Entity.tick > Player.maxTickLead) {
             this.clientPhysics.fastTickInfractions++;
@@ -278,6 +286,11 @@ export class Player extends Entity {
         this.properties.grip = Player.baseProperties.grip;
     }
 
+    calculateCollisionInfo() {
+        super.calculateCollisionInfo();
+        this.updateChunkPosition(Player.chunks);
+    }
+
     /**
      * Damage the player by `d` hit points. Returns `true` if the damage kills the player.
      * @param d Damage amount (negative amounts heal)
@@ -351,7 +364,7 @@ export class Player extends Entity {
      * @returns Player tick data for clients
      */
     static nextTick(): PlayerTickData[] {
-        return Array.from(Player.list).filter(([username, player]) => player.connected).map(([username, player]) => {
+        return Array.from(Player.list.values()).filter((player) => player.connected).map((player) => {
             player.tick();
             return player.tickData;
         });

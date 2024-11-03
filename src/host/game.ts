@@ -86,7 +86,7 @@ export class Game {
             avgtps: metrics.tps.avg,
             heapUsed: metrics.heap.used,
             heapTotal: metrics.heap.total,
-            map: GameMap.current?.name ?? '',
+            map: GameMap.current?.id ?? '',
             players: Player.nextTick(),
             projectiles: Projectile.nextTick()
         });
@@ -292,7 +292,7 @@ parentMessenger.on('playerConnect', (username: string) => {
 });
 
 // load maps immediately and start ticking
-GameMap.reloadMaps().then(() => GameMap.current = GameMap.maps.get('lobby'));
+GameMap.reloadMaps().then(() => GameMap.setMap('lobby'));
 Game.startTickLoop();
 
 export default Game;
