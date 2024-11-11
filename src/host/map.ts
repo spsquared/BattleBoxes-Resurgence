@@ -15,8 +15,9 @@ import { logger } from './host';
 export class GameMap {
     static readonly maps: Map<string, GameMap> = new Map();
     static readonly pools: Map<string, string[]> = new Map();
-    static current?: GameMap = undefined;
+    private static currentMap?: GameMap = undefined;
     private static tileset: GameTileset | undefined;
+    static readonly chunkSize: number = 8;
 
     static readonly logger: NamedLogger = new NamedLogger(logger, 'GameMap');
 
@@ -25,6 +26,8 @@ export class GameMap {
     readonly name: string;
     readonly width: number;
     readonly height: number;
+    readonly chunkWidth: number;
+    readonly chunkHeight: number;
     readonly collisionGrid: MapCollision[][][];
     readonly playerSpawnpoints: Set<Point> = new Set();
     readonly lootboxSpawnpoints: Set<{ pos: Point, type: LootBoxType }> = new Set();
@@ -43,6 +46,8 @@ export class GameMap {
         this.name = raw.properties?.find((prop: any) => prop.name == 'name')?.value ?? this.id;
         this.width = raw.width;
         this.height = raw.height;
+        this.chunkWidth = Math.ceil(this.width / GameMap.chunkSize);
+        this.chunkHeight = Math.ceil(this.height / GameMap.chunkSize);
         this.collisionGrid = Array.from(new Array(this.height), () => Array.from(new Array(this.width), () => new Array()));
         // loop through every tile in every layer and add collisions/spawnpoints
         for (const layer of raw.layers) {
@@ -97,6 +102,8 @@ export class GameMap {
         if (config.debugMode) GameMap.logger.debug(`Loaded "${this.id}" (display name "${this.name}", pool "${this.pool}") in ${performance.now() - start}ms, size ${raw.width}x${raw.height}`, true);
     }
 
+    private static readonly mapChangeListeners: Set<() => any> = new Set();
+
     /**
      * Clears map list and regenerates tileset and maps from file.
      */
@@ -123,7 +130,25 @@ export class GameMap {
      * @returns If a map with matching ID exists (if `false` {@link GameMap.current} is `undefined`!)
      */
     static setMap(id: string): boolean {
-        return (GameMap.current = GameMap.maps.get(id)) !== undefined;
+        this.currentMap = this.maps.get(id);
+        this.mapChangeListeners.forEach((cb) => { try { cb() } catch (err) { this.logger.handleError('Error in map change listener:', err); } });
+        if (config.debugMode) this.logger.debug(`Set map to "${id}" (${this.current !== undefined ? 'Success' : 'Failed'})`);
+        return this.current !== undefined;
+    }
+
+    /**
+     * Add a listener for when a call to {@link setMap} is called.
+     * @param cb Callback function
+     */
+    static onMapChange(cb: () => any): void {
+        this.mapChangeListeners.add(cb);
+    }
+
+    /**
+     * The current loaded map. Undefined if no map is set.
+     */
+    static get current(): GameMap | undefined {
+        return this.currentMap;
     }
 
     /**
@@ -132,8 +157,25 @@ export class GameMap {
      * @returns ID of map in pool or `undefined` if pool wasn't found
      */
     static randomMapInPool(pool: string): string | undefined {
-        const list = GameMap.pools.get(pool);
+        const list = this.pools.get(pool);
         if (list === undefined) return undefined;
+        return list[Math.floor(Math.random() * list.length)];
+    }
+
+    /**
+     * Returns a list of all map pools.
+     * @returns Map pools
+     */
+    static poolList(): string[] {
+        return Array.from(this.pools.keys());
+    }
+    
+    /**
+     * Returns the ID of a random map pool.
+     * @returns Random pool ID
+     */
+    static randomPool(): string {
+        const list = this.poolList();
         return list[Math.floor(Math.random() * list.length)];
     }
 }

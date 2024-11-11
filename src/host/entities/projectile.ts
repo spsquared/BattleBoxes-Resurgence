@@ -13,7 +13,7 @@ export class Projectile extends Entity {
     static readonly logger: NamedLogger = new NamedLogger(logger, 'Projectile');
 
     static readonly list: Map<number, Projectile> = new Map();
-    static readonly chunks: Map<number, Map<number, Set<Projectile>>> = new Map();
+    static readonly chunks: Set<Projectile>[][] = Entity.createChunks<Projectile>();
 
     /**
      * Default movement patterns for projectiles, called each tick on the projectile to move it.
@@ -33,7 +33,8 @@ export class Projectile extends Entity {
                 { x: -0.375, y: 0.125 },
                 { x: 0.125, y: 0.125 },
                 { x: 0.125, y: -0.125 },
-                { x: -0.375, y: -0.125 }
+                { x: -0.375, y: -0.125 },
+                { x: -0.875, y: 0 }
             ],
             moveFunction: Projectile.moveFunctions.linear,
             onMapHit: function (this: Projectile) {
@@ -105,6 +106,7 @@ export class Projectile extends Entity {
         this.boundingBox.right = Math.max(...xcoords);
         this.boundingBox.top = Math.max(...ycoords);
         this.boundingBox.bottom = Math.min(...ycoords);
+        this.lastChunk = structuredClone(this.chunk);
         this.updateChunkPosition(Entity.chunks);
         this.updateChunkPosition(Projectile.chunks);
     }
@@ -141,6 +143,8 @@ export class Projectile extends Entity {
         return Entity.tickList(Projectile.list.values());
     }
 }
+
+GameMap.onMapChange(() => { Projectile.chunks.length = 0; Projectile.chunks.push(...Entity.createChunks<Projectile>()) });
 
 /**
  * Defines a projectile template.

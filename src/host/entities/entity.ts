@@ -10,7 +10,7 @@ import GameMap, { MapCollision } from '../map';
 export abstract class Entity implements Collidable {
     static readonly logger: NamedLogger = new NamedLogger(logger, 'Entity');
 
-    static readonly chunks: Map<number, Map<number, Set<Entity>>> = new Map();
+    static readonly chunks: Set<Entity>[][] = Entity.createChunks<Entity>();
 
     /**Global tick counter that increments for every tick */
     static tick: number = 0;
@@ -20,7 +20,6 @@ export abstract class Entity implements Collidable {
      */
     static readonly physicsResolution: number = config.gamePhysicsResolution;
     static readonly physicsBuffer: number = 0.01;
-    static readonly chunkSize: number = 8;
 
     private static idCounter: number = 0;
     readonly id: number;
@@ -35,6 +34,7 @@ export abstract class Entity implements Collidable {
     gridx: number;
     gridy: number;
     chunk: { x1: number, x2: number, y1: number, y2: number };
+    lastChunk: Entity['chunk'];
     cosVal: number = NaN;
     sinVal: number = NaN;
     readonly boundingBox: Collidable['boundingBox'] = {
@@ -81,6 +81,7 @@ export abstract class Entity implements Collidable {
         this.gridx = Math.floor(x);
         this.gridy = Math.floor(y);
         this.chunk = { x1: NaN, x2: NaN, y1: NaN, y2: NaN };
+        this.lastChunk = this.chunk;
         this.calculateCollisionInfo();
     }
 
@@ -279,6 +280,7 @@ export abstract class Entity implements Collidable {
         this.vertices[0] = { x: this.x + hWidth * this.cosVal - hHeight * this.sinVal, y: this.y + hHeight * this.cosVal + hWidth * this.sinVal };
         this.vertices[0] = { x: this.x + hWidth * this.cosVal + hHeight * this.sinVal, y: this.y - hHeight * this.cosVal + hWidth * this.sinVal };
         this.vertices[0] = { x: this.x - hWidth * this.cosVal + hHeight * this.sinVal, y: this.y - hHeight * this.cosVal - hWidth * this.sinVal };
+        this.lastChunk = structuredClone(this.chunk);
         this.updateChunkPosition(Entity.chunks);
     }
 
@@ -289,30 +291,30 @@ export abstract class Entity implements Collidable {
      * grid of a subclass, which may cause issues not detectable by TypeScript.
      * @param chunkGrid Map that chunks are stored in
      */
-    updateChunkPosition(chunkGrid: Map<number, Map<number, Set<Entity>>>): void {
-        const chunks = chunkGrid;
-        const lastChunk = structuredClone(this.chunk);
+    updateChunkPosition(chunks: Set<Entity>[][]): void {
         this.chunk = {
-            x1: Math.floor(this.boundingBox.left / Entity.chunkSize),
-            x2: Math.floor(this.boundingBox.right / Entity.chunkSize),
-            y1: Math.floor(this.boundingBox.bottom / Entity.chunkSize),
-            y2: Math.floor(this.boundingBox.top / Entity.chunkSize)
+            x1: Math.floor((this.x + this.boundingBox.left) / GameMap.chunkSize),
+            x2: Math.floor((this.x + this.boundingBox.right) / GameMap.chunkSize),
+            y1: Math.floor((this.y + this.boundingBox.bottom) / GameMap.chunkSize),
+            y2: Math.floor((this.y + this.boundingBox.top) / GameMap.chunkSize)
         };
-        if (this.chunk.x1 != lastChunk.x1 || this.chunk.x2 != lastChunk.x2 || this.chunk.x1 != lastChunk.x1 || this.chunk.x2 != lastChunk.x2) {
-            for (let i = lastChunk.y1; i <= lastChunk.y2; i++) {
-                const col = chunks.get(i);
-                if (col === undefined) continue;
-                for (let j = lastChunk.x1; j <= lastChunk.x2; j++) {
-                    // if (i >= this.chunk.y1 && i <= this.chunk.y2 && j >= this.chunk.x1 && j <= this.chunk.x2) continue;
-                    col.get(j)?.delete(this);
+        if (this.chunk.x1 != this.lastChunk.x1 || this.chunk.x2 != this.lastChunk.x2 || this.chunk.x1 != this.lastChunk.x1 || this.chunk.x2 != this.lastChunk.x2) {
+            const x1 = Math.max(0, this.lastChunk.x1);
+            const x2 = Math.min((GameMap.current?.chunkWidth ?? 0) - 1, this.lastChunk.x2);
+            const y1 = Math.max(0, this.lastChunk.y1);
+            const y2 = Math.min((GameMap.current?.chunkHeight ?? 0) - 1, this.lastChunk.y2);
+            for (let y = y1; y <= y2; y++) {
+                for (let x = x1; x <= x2; x++) {
+                    chunks[y][x].delete(this);
                 }
             }
-            for (let i = this.chunk.y1; i <= this.chunk.y2; i++) {
-                const col = chunks.get(i);
-                if (col === undefined) continue;
-                for (let j = this.chunk.x1; j <= this.chunk.x2; j++) {
-                    // if (i >= lastChunk.y1 && i <= lastChunk.y2 && j >= lastChunk.x1 && j <= lastChunk.x2) continue;
-                    col.get(j)?.add(this);
+            const x3 = Math.max(0, this.chunk.x1);
+            const x4 = Math.min((GameMap.current?.chunkWidth ?? 0) - 1, this.chunk.x2);
+            const y3 = Math.max(0, this.chunk.y1);
+            const y4 = Math.min((GameMap.current?.chunkHeight ?? 0) - 1, this.chunk.y2);
+            for (let y = y3; y <= y4; y++) {
+                for (let x = x3; x <= x4; x++) {
+                    chunks[y][x].add(this);
                 }
             }
         }
@@ -323,18 +325,26 @@ export abstract class Entity implements Collidable {
      * @param chunkGrid Map that chunks are stored in
      * @returns Entity list
      */
-    getInSameChunks<E extends Entity>(chunkGrid: Map<number, Map<number, Set<E>>>): E[] {
-        const chunks = chunkGrid;
+    getInSameChunks<E extends Entity>(chunks: Set<E>[][]): E[] {
         const entities: E[] = [];
-        for (let i = this.chunk.y1; i <= this.chunk.y2; i++) {
-            const col = chunks.get(i);
-            if (col === undefined) continue;
-            for (let j = this.chunk.x1; j <= this.chunk.x2; j++) {
-                const l = col.get(j);
-                if (l != undefined) entities.push(...l);
+        const x1 = Math.max(0, this.chunk.x1);
+        const x2 = Math.min((GameMap.current?.chunkWidth ?? 0) - 1, this.chunk.x2);
+        const y1 = Math.max(0, this.chunk.y1);
+        const y2 = Math.min((GameMap.current?.chunkHeight ?? 0) - 1, this.chunk.y2);
+        for (let y = y1; y <= y2; y++) {
+            for (let x = x1; x <= x2; x++) {
+                entities.push(...chunks[y][x]);
             }
         }
         return entities;
+    }
+
+    /**
+     * Creates a new chunk grid based on the current map size.
+     * @returns New grid
+     */
+    static createChunks<E extends Entity>(): Set<E>[][] {
+        return Array.from(new Array((GameMap.current?.height ?? 0) / GameMap.chunkSize), () => Array.from(new Array((GameMap.current?.width ?? 0) / GameMap.chunkSize), () => new Set<E>()));
     }
 
     /**
@@ -435,6 +445,8 @@ export abstract class Entity implements Collidable {
         });
     }
 }
+
+GameMap.onMapChange(() => { Entity.chunks.length = 0; Entity.chunks.push(...Entity.createChunks<Entity>()) });
 
 /**
  * All data necessary to create one entity on the client, fetched each tick.

@@ -14,7 +14,7 @@ export class LootBox extends Entity {
     static readonly logger: NamedLogger = new NamedLogger(logger, 'LootBox');
     
     static readonly list: Map<number, LootBox> = new Map();
-    static readonly chunks: Map<number, Map<number, Set<LootBox>>> = new Map();
+    static readonly chunks: Set<LootBox>[][] = Entity.createChunks<LootBox>();
 
     readonly type: LootBoxType;
     readonly respawns: boolean;
@@ -27,7 +27,6 @@ export class LootBox extends Entity {
         this.vy = -1;
         this.nextPosition();
         this.updateChunkPosition(LootBox.chunks);
-        console.log(LootBox.chunkSize)
     }
 
     tick() {
@@ -36,7 +35,8 @@ export class LootBox extends Entity {
     
     get tickData(): LootBoxTickData {
         return {
-            ...super.tickData
+            ...super.tickData,
+            type: this.type
         };
     }
 
@@ -73,10 +73,13 @@ export class LootBox extends Entity {
     }
 }
 
+GameMap.onMapChange(() => { LootBox.chunks.length = 0; LootBox.chunks.push(...Entity.createChunks<LootBox>()) });
+
 /**
  * All data necessary to create one lootbox on the client, fetched each tick.
  */
 export interface LootBoxTickData extends EntityTickData {
+    readonly type: LootBoxType
 }
 
 export default LootBox;

@@ -1,5 +1,6 @@
 import type { AccountData } from '@/common/database';
 import { NamedLogger } from '@/common/log';
+import config from '@/config';
 
 import { Game } from '../game';
 import { logger } from '../host';
@@ -16,7 +17,7 @@ export class Player extends Entity {
     static readonly logger: NamedLogger = new NamedLogger(logger, 'Player');
 
     static readonly list: Map<string, Player> = new Map();
-    static readonly chunks: Map<number, Map<number, Set<Player>>> = new Map();
+    static readonly chunks: Set<Player>[][] = Entity.createChunks<Player>();
 
     private static readonly maxFastTickInfractions = 10;
     private static readonly maxSlowTickInfractions = 20;
@@ -108,6 +109,7 @@ export class Player extends Entity {
     private static readonly usedColors: Set<string> = new Set();
     readonly color: string;
     connected: boolean = false;
+    ready: boolean = false;
 
     constructor(data: AccountData) {
         super(0, 0, 0.75, 0.75);
@@ -193,10 +195,7 @@ export class Player extends Entity {
         }
         for (const id of packet.modifiers) {
             const mod = this.modifiers.get(id);
-            if (mod === undefined) {
-                this.kick('bad_modifiers');
-                return;
-            } else {
+            if (mod !== undefined) {
                 mod.activated = true;
                 this.updateModifiers();
             }
@@ -253,9 +252,9 @@ export class Player extends Entity {
         this.nextPosition();
         // corroborate positions
         if (this.x != packet.position.endx || this.y != packet.position.endy) {
-            // counting infractions makes it easy for slight desync caused by teleports to kick players
             this.clientPhysics.overrideNextTick = 2;
-            this.logger.warn(`Physics discrepancy detected! Expected (${this.x}, ${this.y}) end position, got (${packet.position.endx}, ${packet.position.endy}) instead`);
+            // counting infractions makes it easy for slight desync caused by teleports to kick players
+            // this.logger.warn(`Physics discrepancy detected! Expected (${this.x}, ${this.y}) end position, got (${packet.position.endx}, ${packet.position.endy}) instead`);
         }
     }
 
@@ -273,6 +272,9 @@ export class Player extends Entity {
             return;
         }
         this.setPosition(spawnpoint.x + 0.5, spawnpoint.y + 0.5);
+        this.setVelocity(0, 0);
+        this.reset();
+        if (config.debugMode) this.logger.debug('Teleported to random spawn point', true);
     }
 
     private updateModifiers(): void {
@@ -308,6 +310,16 @@ export class Player extends Entity {
     setVelocity(vx: number, vy: number, va?: number): void {
         super.setVelocity(vx, vy, va);
         this.clientPhysics.overrideNextTick = 2;
+    }
+
+    /**
+     * Resets player health and effects.
+     */
+    reset(): void {
+        this.modifiers.clear();
+        this.updateModifiers();
+        this.hp = this.maxHp;
+        if (config.debugMode) this.logger.debug('Reset player', true);
     }
 
     get tickData(): PlayerTickData {
@@ -386,9 +398,14 @@ export class Player extends Entity {
                 break;
             }
             player.setPosition(spawnpoint.x + 0.5, spawnpoint.y + 0.5);
+            player.setVelocity(0, 0);
+            player.reset();
         }
+        if (config.debugMode) Player.logger.debug('Spread players randomly', true);
     }
 }
+
+GameMap.onMapChange(() => { Player.chunks.length = 0; Player.chunks.push(...Entity.createChunks<Player>()) });
 
 /**
  * A packet representing a client physics tick, to be cross-checked by the server to minimize cheating.

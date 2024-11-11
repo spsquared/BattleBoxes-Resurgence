@@ -36,7 +36,7 @@ export class GameHostManager {
      */
     getGames(onlyJoinable: boolean = false): GameHostRunner[] {
         const list = Array.from(this.hosts.values());
-        if (onlyJoinable) return list.filter((host) => !host.active);
+        if (onlyJoinable) return list.filter((host) => host.joinable);
         return list;
     }
 
@@ -97,14 +97,15 @@ export class GameHostRunner {
     private readonly players: Map<string, SocketIOSocket> = new Map();
     hostUser: string;
     readonly options: GameHostOptions;
-    private running: boolean = false;
-    private ended: boolean = false;
+    private gameRunning: boolean = false;
+    private inLobby: boolean = true;
     private readonly readyPromise: Promise<void>;
     private readonly endListeners: Set<(error?: boolean) => any> = new Set();
 
     private static readonly existingPlayers: Set<string> = new Set();
 
     private readonly authCodes: Map<string, string> = new Map();
+    private readonly playersReady: Set<string> = new Set();
 
     /**
      * @param {SocketIOServer} io Socket.IO server
@@ -225,6 +226,7 @@ export class GameHostRunner {
         else if (config.debugMode) this.logger.debug(`${username} left the game`);
         this.players.delete(username);
         GameHostRunner.existingPlayers.delete(username);
+        this.playersReady.delete(username);
         socket.emit('leave', reason);
         socket.disconnect();
         this.workerMessenger.emit('playerLeave', username, reason);
@@ -242,12 +244,14 @@ export class GameHostRunner {
     /**
      * Game information as presented on clients.
      */
-    get gameInfo(): GameHostOptions & { readonly id: string, readonly host: string, readonly players: number } {
+    get gameInfo(): GameInfo {
         return {
             ...this.options,
             id: this.id,
             host: this.hostUser,
-            players: this.playerCount
+            players: this.playerCount,
+            playersReady: this.playersReady.size,
+            running: this.gameRunning
         };
     }
 
@@ -264,6 +268,8 @@ export class GameHostRunner {
         });
         this.workerMessenger.on('chatMessage', (message: ChatMessageSection | ChatMessageSection[]) => this.sendChatMessage(message));
         this.workerMessenger.on('privateMessage', (message: ChatMessageSection | ChatMessageSection[], target: string) => this.sendPrivateMessage(message, target));
+        this.workerMessenger.on('gameStart', () => { this.gameRunning = true; this.inLobby = false; this.broadcastGameInfo() });
+        this.workerMessenger.on('gameEnd', () => { this.gameRunning = false; this.broadcastGameInfo() });
     }
 
     /**
@@ -309,29 +315,23 @@ export class GameHostRunner {
 
         // forward events
         const sendEvents: string[] = ['pong', 'initPlayerPhysics'];
-        const sendEventHandlers: (() => void)[] = [];
-        const receiveEvents: string[] = ['ping', 'ready', 'tick', 'chatMessage'];
-        const receiveEventHandlers: (() => void)[] = [];
+        const receiveEvents: string[] = ['ping', 'ready', 'tick', 'chatMessage', 'readyStart'];
         for (const ev of sendEvents) {
-            const handle = (...data: any[]) => socket.emit(ev, ...data);
-            sendEventHandlers.push(handle);
-            this.workerMessenger.on(`${username}/${ev}`, handle);
+            this.workerMessenger.on(`${username}/${ev}`, (...data: any[]) => socket.emit(ev, ...data));
         }
         for (const ev of receiveEvents) {
             const map = `${username}/${ev}`;
-            const handle = (...data: any[]) => this.workerMessenger.emit(map, ...data);
-            receiveEventHandlers.push(handle);
-            socket.on(ev, handle);
+            socket.on(ev, (...data: any[]) => this.workerMessenger.emit(map, ...data));
         }
+        socket.on('readyStart', (ready: boolean) => {
+            if (ready) this.playersReady.add(username);
+            else this.playersReady.delete(username);
+            this.broadcastGameInfo();
+        });
         // removing listeners
         socket.on('disconnect', () => {
             this.removePlayer(username);
-            for (let i in sendEvents) {
-                this.workerMessenger.off(`${username}/${sendEvents[i]}`, sendEventHandlers[i]);
-            }
-            for (let i in receiveEvents) {
-                socket.off(receiveEvents[i], receiveEventHandlers[i]);
-            }
+            socket.removeAllListeners();
         });
 
         // notify host of connection completion
@@ -371,17 +371,17 @@ export class GameHostRunner {
     }
 
     /**
-     * If the game is in the lobby and is joinable.
+     * If the game is active (not in lobby and not ended).
      */
-    get active() {
-        return this.running;
+    get running(): boolean {
+        return this.gameRunning;
     }
 
     /**
-     * If the game has finished and is no longer running at all (clients are on leaderboards).
+     * If the game is currently joinable (in lobby).
      */
-    get finished() {
-        return this.ended;
+    get joinable(): boolean {
+        return this.inLobby;
     }
 
     /**
@@ -425,6 +425,20 @@ export interface GameHostOptions {
     readonly aiPlayers: number
     /**Allow players to join through a public join list */
     readonly public: boolean
+}
+
+/**Information for client display of a game */
+export interface GameInfo extends GameHostOptions {
+    /**ID of game */
+    readonly id: string
+    /**Username of the host player */
+    readonly host: string
+    /**The number of players connected */
+    readonly players: number
+    /**The number of players ready for game start */
+    readonly playersReady: number
+    /**If the game is active (not in lobby and not ended) */
+    readonly running: boolean
 }
 
 /**Describes a single section of a chat message */

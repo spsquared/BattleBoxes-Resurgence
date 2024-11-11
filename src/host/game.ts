@@ -6,12 +6,14 @@ import { NamedLogger } from '@/common/log';
 import config from '@/config';
 
 import Entity from './entities/entity';
+import LootBox from './entities/lootbox';
 import Player, { PlayerTickInput } from './entities/player';
 import Projectile from './entities/projectile';
 import { logger, parentMessenger, stopServer } from './host';
 import GameMap from './map';
 
 import type { ChatMessageSection } from '@/hub/hostRunner';
+
 /**
  * Handles core game logic like points, rounds, and ticking.
  */
@@ -24,7 +26,7 @@ export class Game {
     private static running: boolean = true;
     private static runStart: number = 0;
     /**Lobby mode enables respawning and disables statistic trackers and points */
-    private static lobbyMode: boolean = true;
+    static lobbyMode: boolean = true;
 
     private static readonly perfMetrics: {
         tpsTimes: number[]
@@ -45,14 +47,15 @@ export class Game {
             const start = performance.now();
             this.tick();
             const end = performance.now();
+            // use tick start time so 0tps is actually reportable
             this.perfMetrics.tpsTimes.push(start);
-            this.perfMetrics.tpsHist.push(this.perfMetrics.tpsTimes.length);
-            this.perfMetrics.tickTimes.push(end - start);
             while (this.perfMetrics.tpsTimes[0] <= end - 1000) {
                 this.perfMetrics.tpsTimes.shift();
                 this.perfMetrics.tpsHist.shift();
                 this.perfMetrics.tickTimes.shift();
             }
+            this.perfMetrics.tpsHist.push(this.perfMetrics.tpsTimes.length);
+            this.perfMetrics.tickTimes.push(end - start);
             await new Promise<void>((resolve) => setTimeout(resolve, this.tickTiming - end + start));
         }
     }
@@ -82,13 +85,14 @@ export class Game {
         Entity.nextTick();
         parentMessenger.emit('tick', {
             tick: Entity.tick,
-            tps: metrics.tps.curr,
-            avgtps: metrics.tps.avg,
+            tps: metrics.tps,
+            timings: metrics.timings,
             heapUsed: metrics.heap.used,
             heapTotal: metrics.heap.total,
             map: GameMap.current?.id ?? '',
             players: Player.nextTick(),
-            projectiles: Projectile.nextTick()
+            projectiles: Projectile.nextTick(),
+            lootboxes: LootBox.nextTick()
         });
     }
 
@@ -127,6 +131,17 @@ export class Game {
                 chatInfractions.profanity = 0;
             }, 60000)
         };
+        // ready button
+        parentMessenger.on(player.username + '/readyStart', (ready: boolean) => {
+            player.ready = ready && true || false; // converts to boolean
+            let readyCount = 0;
+            for (const player of Player.list.values()) {
+                if (player.ready) readyCount++;
+            }
+            if (readyCount >= Math.max(this.minPlayersReady, Player.list.size) && !this.gameRunning) {
+                this.start();
+            }
+        });
         // allow consecutive violation so "oh... buh" doesnt cause ban
         const onChatMessage = (message: string) => {
             if (typeof message != 'string' || message.length > 128 || message.length < 1) {
@@ -192,6 +207,10 @@ export class Game {
             Player.list.delete(username);
             player.remove();
             parentMessenger.emit('playerData', player.accountData);
+            parentMessenger.removeAllListeners(player.username + '/tick');
+            parentMessenger.removeAllListeners(player.username + '/ping');
+            parentMessenger.removeAllListeners(player.username + '/readyStart');
+            parentMessenger.removeAllListeners(player.username + '/chatMessage');
             if (reason != undefined) {
                 parentMessenger.emit('kick', username, reason);
                 this.logger.warn(`Kicked ${username}: ${reason}`);
@@ -219,11 +238,35 @@ export class Game {
         parentMessenger.emit('privateMessage', message, target);
     }
 
+    static readonly minPlayersReady = 1; // SET TO 2!!!!!!!!!!!
+    static gameRunning: boolean = false;
+    static round: number = -1;
+
     /**
      * Starts the game immediately.
      */
     static start(): void {
-        this.startTickLoop();
+        this.gameRunning = true;
+        this.lobbyMode = false;
+        parentMessenger.emit('gameStart');
+        this.logger.info('Game is starting');
+        this.sendChatMessage({ text: 'The game is starting!', style: { color: '#0E0', fontWeight: 'bold' } });
+        this.startRound();
+    }
+
+    static startRound(): void {
+        this.round++;
+        // add pool stuff later
+        const pool = GameMap.randomPool();
+        const map = GameMap.randomMapInPool(pool);
+        if (map == undefined) this.logger.warn(`Could not set map from nonexistent pool "${pool}"`);
+        const success = GameMap.setMap(map ?? 'lobby');
+        if (!success) this.logger.warn(`Failed to set map to "${map}"`);
+        Player.spreadPlayers();
+    }
+
+    static endRound(): void {
+
     }
 
     /**
@@ -233,13 +276,18 @@ export class Game {
     static async stop(reason: string): Promise<void> {
         if (!this.running) return;
         this.running = false;
+        parentMessenger.emit('gameEnd');
         this.logger.info(`Game was stopped: ${reason}`);
+        this.sendChatMessage([
+            { text: 'Game stopped! ', style: { color: '#F00', fontWeight: 'bold' } },
+            { text: 'Reason: ' + reason, style: { color: '#F00' } }
+        ]);
         Player.list.forEach((player) => player.remove());
         stopServer(0);
     }
 
     /**
-     * Contains performance metrics regarding server tickrate and timings.
+     * Retrieves performance metrics regarding server tickrate and timings.
      */
     static get metrics() {
         const memUsage = process.memoryUsage();
@@ -276,7 +324,8 @@ parentMessenger.on('playerConnect', (username: string) => {
         physicsResolution: Entity.physicsResolution,
         physicsBuffer: Entity.physicsBuffer,
         playerProperties: Player.baseProperties,
-        projectileTypes: Projectile.typeVertices
+        projectileTypes: Projectile.typeVertices,
+        chunkSize: GameMap.chunkSize
     });
     parentMessenger.once(username + '/ready', () => {
         const player = Player.list.get(username);

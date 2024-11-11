@@ -12,7 +12,6 @@ export class LootBoxRespawn extends Entity {
     static readonly logger: NamedLogger = new NamedLogger(logger, 'LootBoxRespawn');
     
     static readonly list: Map<number, LootBoxRespawn> = new Map();
-    static readonly chunks: Map<number, Map<number, Set<LootBoxRespawn>>> = new Map();
 
     readonly type: LootBoxType;
     timer: number;
@@ -21,7 +20,6 @@ export class LootBoxRespawn extends Entity {
         super(x, y, 1, 1, 0);
         this.type = type;
         this.timer = delay;
-        this.updateChunkPosition(LootBoxRespawn.chunks);
     }
 
     tick() {
