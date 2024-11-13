@@ -171,8 +171,9 @@ export class Player extends Entity {
     }
 
     /**
-     * Player-unique tick that runs when the client sends its physics tick to the server.
-     * Validates the physics tick by running it on the same conditions
+     * Player-unique physics tick. Physics ticking is decoupled from rest of server ticking
+     * and is client-controlled (server runs player physics tick when client packet is recieved).
+     * This prevents desync and handles latency and performance hitches well.
      * @param packet Client tick packet
      */
     physicsTick(p: PlayerTickInput): void {

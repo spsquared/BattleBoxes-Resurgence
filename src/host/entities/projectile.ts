@@ -96,6 +96,7 @@ export class Projectile extends Entity {
         this.sinVal = Math.sin(this.angle);
         // calculateCollisionInfo is called in Entity constructor, so removing undefined check results in crash
         this.vertices.length = 0;
+        // asdfdsafdsaf slow
         if (this.typeData !== undefined) this.vertices.push(...this.typeData.vertices.map((p) => ({
             x: this.x + p.x * this.cosVal - p.y * this.sinVal,
             y: this.y + p.y * this.cosVal + p.x * this.sinVal

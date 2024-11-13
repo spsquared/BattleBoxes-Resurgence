@@ -277,9 +277,9 @@ export abstract class Entity implements Collidable {
         const hWidth = this.width / 2;
         const hHeight = this.height / 2;
         this.vertices[0] = { x: this.x - hWidth * this.cosVal - hHeight * this.sinVal, y: this.y + hHeight * this.cosVal - hWidth * this.sinVal };
-        this.vertices[0] = { x: this.x + hWidth * this.cosVal - hHeight * this.sinVal, y: this.y + hHeight * this.cosVal + hWidth * this.sinVal };
-        this.vertices[0] = { x: this.x + hWidth * this.cosVal + hHeight * this.sinVal, y: this.y - hHeight * this.cosVal + hWidth * this.sinVal };
-        this.vertices[0] = { x: this.x - hWidth * this.cosVal + hHeight * this.sinVal, y: this.y - hHeight * this.cosVal - hWidth * this.sinVal };
+        this.vertices[1] = { x: this.x + hWidth * this.cosVal - hHeight * this.sinVal, y: this.y + hHeight * this.cosVal + hWidth * this.sinVal };
+        this.vertices[2] = { x: this.x + hWidth * this.cosVal + hHeight * this.sinVal, y: this.y - hHeight * this.cosVal + hWidth * this.sinVal };
+        this.vertices[3] = { x: this.x - hWidth * this.cosVal + hHeight * this.sinVal, y: this.y - hHeight * this.cosVal - hWidth * this.sinVal };
         this.lastChunk = structuredClone(this.chunk);
         this.updateChunkPosition(Entity.chunks);
     }
