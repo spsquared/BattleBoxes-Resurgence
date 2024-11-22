@@ -224,6 +224,11 @@ export abstract class Entity implements Collidable {
      * @returns If the entities are colliding
      */
     collidesWithEntity(that: Collidable): boolean {
+        // console.log(this.id,
+        //     this.x + this.boundingBox.left > that.x + this.boundingBox.right // right
+        //     , this.x + this.boundingBox.right < that.x + this.boundingBox.left // left
+        //     , this.y + this.boundingBox.top < that.y + this.boundingBox.bottom // below
+        //     , this.y + this.boundingBox.bottom > that.y + this.boundingBox.top) // above
         if (this.x + this.boundingBox.left > that.x + this.boundingBox.right
             || this.x + this.boundingBox.right < that.x + this.boundingBox.left
             || this.y + this.boundingBox.top < that.y + this.boundingBox.bottom
@@ -231,13 +236,24 @@ export abstract class Entity implements Collidable {
         ) {
             return false;
         }
+        console.log('wat', this.id, '-------------------------------------------')
+        // SOMETHING IS BORKEN HERE AND I CAN'T FIND WHAT
+        // SOMETHING IS BORKEN HERE AND I CAN'T FIND WHAT
+        // SOMETHING IS BORKEN HERE AND I CAN'T FIND WHAT
+        // SOMETHING IS BORKEN HERE AND I CAN'T FIND WHAT
+        // SOMETHING IS BORKEN HERE AND I CAN'T FIND WHAT
+        // SOMETHING IS BORKEN HERE AND I CAN'T FIND WHAT
         for (const p of this.vertices) {
+            that.vertices.every((q, i) => console.log(this.vertices.indexOf(p), i, that.vertices.length))
             if (that.vertices.every((q, i) => Entity.isWithin(p, q, that.vertices[(i + 1) % that.vertices.length]))) {
+                console.log(p, this.vertices.indexOf(p))
                 return true;
             }
         }
         for (const p of that.vertices) {
+            this.vertices.every((q, i) => console.log(that.vertices.indexOf(p), i, this.vertices.length))
             if (this.vertices.every((q, i) => Entity.isWithin(p, q, this.vertices[(i + 1) % this.vertices.length]))) {
+                console.log(p, that.vertices.indexOf(p))
                 return true;
             }
         }
@@ -258,6 +274,9 @@ export abstract class Entity implements Collidable {
      * @returns If point P is within the boundary of QR
      */
     private static isWithin(p: Point, q: Point, r: Point): boolean {
+        // (PxRy - RxPy) - (QxRy - RxQy) + (QxPy - PxQy)
+        // PxRy - RxPy + RxQy - QxRy + QxPy - PxQy
+        // Qx(Py - Ry) + Px(Ry - Qy) + Rx(Qy - Py)
         return q.x * (p.y - r.y) + p.x * (r.y - q.y) + r.x * (q.y - p.y) >= 0;
     }
 
@@ -281,6 +300,12 @@ export abstract class Entity implements Collidable {
         this.vertices[2] = { x: this.x + hWidth * this.cosVal + hHeight * this.sinVal, y: this.y - hHeight * this.cosVal + hWidth * this.sinVal };
         this.vertices[3] = { x: this.x - hWidth * this.cosVal + hHeight * this.sinVal, y: this.y - hHeight * this.cosVal - hWidth * this.sinVal };
         this.lastChunk = structuredClone(this.chunk);
+        this.chunk = {
+            x1: Math.floor((this.x + this.boundingBox.left) / GameMap.chunkSize),
+            x2: Math.floor((this.x + this.boundingBox.right) / GameMap.chunkSize),
+            y1: Math.floor((this.y + this.boundingBox.bottom) / GameMap.chunkSize),
+            y2: Math.floor((this.y + this.boundingBox.top) / GameMap.chunkSize)
+        };
         this.updateChunkPosition(Entity.chunks);
     }
 
@@ -292,12 +317,6 @@ export abstract class Entity implements Collidable {
      * @param chunkGrid Map that chunks are stored in
      */
     updateChunkPosition(chunks: Set<Entity>[][]): void {
-        this.chunk = {
-            x1: Math.floor((this.x + this.boundingBox.left) / GameMap.chunkSize),
-            x2: Math.floor((this.x + this.boundingBox.right) / GameMap.chunkSize),
-            y1: Math.floor((this.y + this.boundingBox.bottom) / GameMap.chunkSize),
-            y2: Math.floor((this.y + this.boundingBox.top) / GameMap.chunkSize)
-        };
         if (this.chunk.x1 != this.lastChunk.x1 || this.chunk.x2 != this.lastChunk.x2 || this.chunk.x1 != this.lastChunk.x1 || this.chunk.x2 != this.lastChunk.x2) {
             const x1 = Math.max(0, this.lastChunk.x1);
             const x2 = Math.min((GameMap.current?.chunkWidth ?? 0) - 1, this.lastChunk.x2);

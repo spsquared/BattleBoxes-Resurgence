@@ -108,6 +108,12 @@ export class Projectile extends Entity {
         this.boundingBox.top = Math.max(...ycoords);
         this.boundingBox.bottom = Math.min(...ycoords);
         this.lastChunk = structuredClone(this.chunk);
+        this.chunk = {
+            x1: Math.floor((this.x + this.boundingBox.left) / GameMap.chunkSize),
+            x2: Math.floor((this.x + this.boundingBox.right) / GameMap.chunkSize),
+            y1: Math.floor((this.y + this.boundingBox.bottom) / GameMap.chunkSize),
+            y2: Math.floor((this.y + this.boundingBox.top) / GameMap.chunkSize)
+        };
         this.updateChunkPosition(Entity.chunks);
         this.updateChunkPosition(Projectile.chunks);
     }
@@ -117,7 +123,8 @@ export class Projectile extends Entity {
             ...super.tickData,
             type: this.type,
             parent: this.parent.username,
-            boundingBox: this.boundingBox
+            boundingBox: this.boundingBox,
+            vertices: this.vertices
         };
     }
 
@@ -170,6 +177,7 @@ export interface ProjectileTickData extends EntityTickData {
     readonly type: keyof typeof Projectile.types
     readonly parent: string
     readonly boundingBox: Projectile['boundingBox']
+    vertices: Projectile['vertices']
 }
 
 export default Projectile;
