@@ -115,7 +115,6 @@ export class Game {
                 return;
             }
             player.physicsTick(packet);
-            tplayer.physicsTick(packet)
         };
         parentMessenger.on(player.username + '/tick', onPhysicsTick);
         // ping
@@ -195,30 +194,6 @@ export class Game {
             parentMessenger.off(player.username + '/chatMessage', onChatMessage);
             clearInterval(chatInfractions.decrementer);
         });
-
-        // buh
-        const tplayer = new Player({
-            username: 'temp',
-            xp: 0,
-            trackers: {
-                time: 0,
-                distanceMoved: 0,
-                airTime: 0,
-                jumps: 0,
-                wallJumps: 0,
-                fallDistance: 0,
-                wallSlideDistance: 0,
-                shotsFired: 0,
-                damageDealt: 0,
-                damagetaken: 0,
-                damageAbsorbed: 0,
-                lootboxesOpened: 0
-            },
-            achievements: [],
-            infractions: []
-        });
-        tplayer.connected = true;
-        tplayer.toRandomSpawnpoint();
     }
 
     /**
@@ -263,7 +238,7 @@ export class Game {
         parentMessenger.emit('privateMessage', message, target);
     }
 
-    static readonly minPlayersReady = 1; // SET TO 2!!!!!!!!!!!
+    static readonly minPlayersReady = 2; // SET TO 2!!!!!!!!!!!
     static gameRunning: boolean = false;
     static round: number = -1;
 

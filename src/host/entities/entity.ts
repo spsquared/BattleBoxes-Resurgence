@@ -57,6 +57,7 @@ export abstract class Entity implements Collidable {
             bottom: 0
         };
     hasCollision: boolean = true;
+    allowSliding: boolean = true;
     allowOutOfBounds: boolean = true;
 
     /**
@@ -132,6 +133,15 @@ export abstract class Entity implements Collidable {
             }
             const col1 = this.collidesWithMap(pos.x, pos.y);
             if (col1 !== null) {
+                if (!this.allowSliding) {
+                    // stop immediately
+                    pos.x = pos.lx;
+                    pos.y = pos.ly;
+                    pos.dx = this.vx = 0;
+                    pos.dy = this.vy = 0;
+                    this.contactEdges.left = this.contactEdges.right = this.contactEdges.top = this.contactEdges.bottom = col1.friction;
+                    break;
+                }
                 const col2 = this.collidesWithMap(pos.x, pos.ly);
                 if (col2 !== null) {
                     const col3 = this.collidesWithMap(pos.lx, pos.y);

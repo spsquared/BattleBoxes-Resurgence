@@ -47,9 +47,10 @@ export class Projectile extends Entity {
             collidesWith: {
                 player: true,
                 projectile: false
-            }
-        } satisfies ProjectileType
-    };
+            },
+            slides: false
+        }
+    } satisfies { [key: string]: ProjectileType };
     static readonly typeVertices: { [key in keyof typeof Projectile.types]: Point[] } = Object.entries(Projectile.types).reduce((map, [id, data]: [any, ProjectileType]) => {
         map[id] = data.vertices;
         return map;
@@ -65,6 +66,11 @@ export class Projectile extends Entity {
         this.type = type;
         this.typeData = Projectile.types[type];
         this.parent = parent;
+        if (this.typeData == undefined) {
+            Projectile.logger.handleError('Could not create projectile:', new ReferenceError(`Projectile type "${type}" does not exist`));
+            return;
+        }
+        this.allowSliding = this.typeData.slides;
         this.setVelocity(this.parent.vx * 0.25 + this.typeData.speed * this.cosVal, this.parent.vy * 0.25 + this.typeData.speed * this.sinVal, this.typeData.angularSpeed);
         Projectile.list.set(this.id, this);
     }
@@ -123,8 +129,7 @@ export class Projectile extends Entity {
             ...super.tickData,
             type: this.type,
             parent: this.parent.username,
-            boundingBox: this.boundingBox,
-            vertices: this.vertices
+            boundingBox: this.boundingBox
         };
     }
 
@@ -158,16 +163,17 @@ GameMap.onMapChange(() => { Projectile.chunks.length = 0; Projectile.chunks.push
  * Defines a projectile template.
  */
 export interface ProjectileType {
-    speed: number
-    angularSpeed: number
+    readonly speed: number
+    readonly angularSpeed: number
     readonly vertices: Point[]
     moveFunction: () => void
     readonly onMapHit: () => void
     readonly onEntityHit: (entity: Entity) => void
-    collidesWith: {
-        player: boolean
-        projectile: boolean
+    readonly collidesWith: {
+        readonly player: boolean
+        readonly projectile: boolean
     }
+    readonly slides: boolean
 }
 
 /**
@@ -177,7 +183,6 @@ export interface ProjectileTickData extends EntityTickData {
     readonly type: keyof typeof Projectile.types
     readonly parent: string
     readonly boundingBox: Projectile['boundingBox']
-    vertices: Projectile['vertices']
 }
 
 export default Projectile;
