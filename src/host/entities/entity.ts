@@ -201,12 +201,12 @@ export abstract class Entity implements Collidable {
                         continue;
                     }
                     for (const p of vertices) {
-                        if (col.vertices.every((q, i) => Entity.isWithin(p, q, col.vertices[(i + 1) % col.vertices.length]))) {
+                        if (col.vertices.some((q, i) => Entity.isWithin(p, q, col.vertices[(i + 1) % col.vertices.length]))) {
                             return col;
                         }
                     }
                     for (const p of col.vertices) {
-                        if (vertices.every((q, i) => Entity.isWithin(p, q, vertices[(i + 1) % vertices.length]))) {
+                        if (vertices.some((q, i) => Entity.isWithin(p, q, vertices[(i + 1) % vertices.length]))) {
                             return col;
                         }
                     }
@@ -224,11 +224,6 @@ export abstract class Entity implements Collidable {
      * @returns If the entities are colliding
      */
     collidesWithEntity(that: Collidable): boolean {
-        // console.log(this.id,
-        //     this.x + this.boundingBox.left > that.x + this.boundingBox.right // right
-        //     , this.x + this.boundingBox.right < that.x + this.boundingBox.left // left
-        //     , this.y + this.boundingBox.top < that.y + this.boundingBox.bottom // below
-        //     , this.y + this.boundingBox.bottom > that.y + this.boundingBox.top) // above
         if (this.x + this.boundingBox.left > that.x + this.boundingBox.right
             || this.x + this.boundingBox.right < that.x + this.boundingBox.left
             || this.y + this.boundingBox.top < that.y + this.boundingBox.bottom
@@ -236,24 +231,13 @@ export abstract class Entity implements Collidable {
         ) {
             return false;
         }
-        console.log('wat', this.id, '-------------------------------------------')
-        // SOMETHING IS BORKEN HERE AND I CAN'T FIND WHAT
-        // SOMETHING IS BORKEN HERE AND I CAN'T FIND WHAT
-        // SOMETHING IS BORKEN HERE AND I CAN'T FIND WHAT
-        // SOMETHING IS BORKEN HERE AND I CAN'T FIND WHAT
-        // SOMETHING IS BORKEN HERE AND I CAN'T FIND WHAT
-        // SOMETHING IS BORKEN HERE AND I CAN'T FIND WHAT
         for (const p of this.vertices) {
-            that.vertices.every((q, i) => console.log(this.vertices.indexOf(p), i, that.vertices.length))
-            if (that.vertices.every((q, i) => Entity.isWithin(p, q, that.vertices[(i + 1) % that.vertices.length]))) {
-                console.log(p, this.vertices.indexOf(p))
+            if (that.vertices.some((q, i) => Entity.isWithin(p, q, that.vertices[(i + 1) % that.vertices.length]))) {
                 return true;
             }
         }
         for (const p of that.vertices) {
-            this.vertices.every((q, i) => console.log(that.vertices.indexOf(p), i, this.vertices.length))
-            if (this.vertices.every((q, i) => Entity.isWithin(p, q, this.vertices[(i + 1) % this.vertices.length]))) {
-                console.log(p, that.vertices.indexOf(p))
+            if (this.vertices.some((q, i) => Entity.isWithin(p, q, this.vertices[(i + 1) % this.vertices.length]))) {
                 return true;
             }
         }
