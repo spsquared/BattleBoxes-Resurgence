@@ -238,9 +238,9 @@ export class Game {
         parentMessenger.emit('privateMessage', message, target);
     }
 
-    static readonly minPlayersReady = 2; // SET TO 2!!!!!!!!!!!
+    static readonly minPlayersReady = 1; // SET TO 2!!!!!!!!!!!
     static gameRunning: boolean = false;
-    static round: number = -1;
+    static round: number = 0;
 
     /**
      * Starts the game immediately.
@@ -263,6 +263,7 @@ export class Game {
         const success = GameMap.setMap(map ?? 'lobby');
         if (!success) this.logger.warn(`Failed to set map to "${map}"`);
         Player.spreadPlayers();
+        // use effect to freeze players - special countdown effect
     }
 
     static endRound(): void {

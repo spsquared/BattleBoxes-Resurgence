@@ -268,8 +268,16 @@ export class GameHostRunner {
         });
         this.workerMessenger.on('chatMessage', (message: ChatMessageSection | ChatMessageSection[]) => this.sendChatMessage(message));
         this.workerMessenger.on('privateMessage', (message: ChatMessageSection | ChatMessageSection[], target: string) => this.sendPrivateMessage(message, target));
-        this.workerMessenger.on('gameStart', () => { this.gameRunning = true; this.inLobby = false; this.broadcastGameInfo() });
-        this.workerMessenger.on('gameEnd', () => { this.gameRunning = false; this.broadcastGameInfo() });
+        this.workerMessenger.on('gameStart', () => {
+            this.gameRunning = true;
+            this.inLobby = false;
+            this.broadcastGameInfo();
+        });
+        this.workerMessenger.on('gameEnd', () => {
+            this.gameRunning = false;
+            this.broadcastGameInfo();
+            this.io.emit('gameEnd');
+        });
     }
 
     /**

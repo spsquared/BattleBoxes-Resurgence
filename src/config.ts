@@ -118,6 +118,7 @@ if (isMainThread) {
     const config2: any = structuredClone(config);
     config2.port = fileConfig.port ?? 2000;
     config2.debugMode = fileConfig.debugMode ?? false;
+    delete config2.chatBannedWordList;
     delete config2.path;
     delete config2.scriptPath;
     delete config2.configPath;
