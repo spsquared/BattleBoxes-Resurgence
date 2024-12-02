@@ -19,3 +19,7 @@ Making maps:
 - Spawnpoints are defined by the custom property "spawnpoint"
   - There must be at least `config.gameMaxPlayers` possible player spawnpoints (custom property value is "player")
   - Lootbox spawnpoints can be random ("lootbox="), positive random ("lootbox=+"), negative random ("lootbox=-"), or the id of the lootbox ("lootbox=`{id}`", where `{id}` is replaced by the id)
+
+Random things that happen to be important:
+* The `DATABASE_URL` environment variable must be set by default. To use a local file database (not recommended, prone to corruption!), disable it in the configuration file (/config/config.json).
+* For non-local hosting, the CORS policies and Content Security Policy must be updated to include your domains. Server/client domains can be updated through `config.json` and `.env` files, however CSP must be updated in `index.html` of the client.

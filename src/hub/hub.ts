@@ -24,7 +24,7 @@ logger.info('Starting server...');
 logger.debug('BASE_PATH: ' + config.path);
 logger.debug('GAME_SRC_PATH: ' + config.gameSourcePath);
 logger.debug('CONFIG_PATH: ' + config.configPath);
-logger.debug('Current config:\n' + JSON.stringify({ ...config, chatBannedWordList: ['not shown'] }, null, 4), true);
+logger.debug('Current config:\n' + JSON.stringify({ ...config, chatBannedWordList: ['not shown'], accessOrigins: config.accessOrigins.map((exp) => exp.source) }, null, 4), true);
 if (config.debugMode) logger.info('Extra debug logging is enabled (disable this if this is not a development environment!)');
 
 // set up networking
@@ -34,7 +34,6 @@ import https from 'https';
 import { rateLimit } from 'express-rate-limit';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
-const allowedOrigins = [/https?:\/\/localhost:[0-9]{1,5}/]; // /https:\/\/(?:.+\.)*domain\.com/
 const app = express();
 const server = fs.existsSync(path.resolve(config.configPath, 'cert.pem')) ? https.createServer({
     key: fs.readFileSync(path.resolve(config.configPath, 'cert-key.pem')),
@@ -49,7 +48,7 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 app.use(cors({
-    origin: allowedOrigins,
+    origin: config.accessOrigins,
     credentials: true,
     allowedHeaders: 'Content-Type,Cookie'
 }));
@@ -74,7 +73,7 @@ if (config.debugMode) logger.info('Creating Socket.IO server');
 const io = new SocketIOServer(server, {
     path: '/game-socketio',
     cors: {
-        origin: allowedOrigins,
+        origin: config.accessOrigins,
         methods: ['GET', 'POST'],
         credentials: true
     }

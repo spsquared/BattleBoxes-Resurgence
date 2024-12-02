@@ -7,6 +7,8 @@ import { isMainThread, workerData } from 'worker_threads';
 type ServerConfig = {
     /**TCP port for the HTTP/HTTPS server to listen to (default: 9000) */
     readonly port: number
+    /**Array of regular expressions to match domains for CORS policy (default: `^https?:\/\/localhost:[0-9]{1,5}`, ex: `^https:\/\/(?:.+\.)*domain\.com`) */
+    readonly accessOrigins: RegExp[]
     /**Ratelimiting - how many new Socket.IO connections can be made from any given IP address in 1 second before clients are kicked (default: 5) */
     readonly maxConnectPerSecond: number
     /**Ratelimiting - how many new accounts can be made from any given IP address in 1 minute before clients are kicked (default: 1) */
@@ -90,6 +92,15 @@ const ensureNumber = (input: any): number => {
  */
 const config: ServerConfig = isMainThread ? {
     port: ensureNumber(process.env.PORT ?? fileConfig.port ?? 9000),
+    accessOrigins: fileConfig.accessOrigins == null ? [/^https?:\/\/localhost:[0-9]{1,5}/] : Array.from(fileConfig.accessOrigins).reduce<RegExp[]>((arr, reg: any) => {
+        try {
+            arr.push(new RegExp(reg));
+        } catch (err) {
+            console.error('Invalid regular expression for accessOrigins');
+            console.error(err);
+        }
+        return arr;
+    }, []),
     maxConnectPerSecond: ensureNumber(fileConfig.maxConnectPerSecond ?? 5),
     maxSignupPerMinute: ensureNumber(fileConfig.maxSignupPerMinute ?? 1),
     rsaKeyRotateInterval: ensureNumber(fileConfig.rsaKeyRotateInterval ?? 86400000),
@@ -116,7 +127,8 @@ if (isMainThread) {
     process.env.GAME_SRC_PATH = config.gameSourcePath;
     // when writing back to file, prevent environment variables and argument overrides also overwriting file configurations
     const config2: any = structuredClone(config);
-    config2.port = fileConfig.port ?? 2000;
+    config2.port = fileConfig.port ?? 9000;
+    config2.accessOrigins = config.accessOrigins.map((exp) => exp.source);
     config2.debugMode = fileConfig.debugMode ?? false;
     delete config2.chatBannedWordList;
     delete config2.path;
