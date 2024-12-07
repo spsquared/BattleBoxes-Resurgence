@@ -1,7 +1,13 @@
 # BattleBoxes-Resurgence
 BattleBoxes Multiplayer, but with AI bots and Not Spaghetti™ code!
 
-
+## Roadmap (unordered)
+- [x] Multi-game system with servers running on separate threads
+- [ ] Improved synchronization of players across clients
+- [ ] g a m e p l a y (nebulous goal) with weapons system and effects
+- [ ] WebGL particle system
+- [ ] AI bots running locally on the server
+- [ ] Endpoints for user-trained bots and bot training API (very far in the future)
 
 **Herebe unfinished documentation!!!!**
 
