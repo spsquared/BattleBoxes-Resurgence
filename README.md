@@ -8,8 +8,9 @@ BattleBoxes Multiplayer, but with AI bots and Not Spaghetti™ code!
 - [ ] WebGL particle system
 - [ ] AI bots running locally on the server
 - [ ] Endpoints for user-trained bots and bot training API (very far in the future)
+- [ ] WebGPU particles with simulation?? (even farther)
 
-**Herebe unfinished documentation!!!!**
+## Herebe unfinished documentation!!!!
 
 Making maps:
 - Maps are made using [Tiled](https://www.mapeditor.org/) v1.11.0 (other versions may work), in orthagonal layout and in "Right Down" order (both map and tileset)
@@ -26,6 +27,7 @@ Making maps:
   - There must be at least `config.gameMaxPlayers` possible player spawnpoints (custom property value is "player")
   - Lootbox spawnpoints can be random ("lootbox="), positive random ("lootbox=+"), negative random ("lootbox=-"), or the id of the lootbox ("lootbox=`{id}`", where `{id}` is replaced by the id)
 
-Random things that happen to be important:
+**Random things that happen to be important:**
+
 * The `DATABASE_URL` environment variable must be set by default. To use a local file database (not recommended, prone to corruption!), disable it in the configuration file (/config/config.json).
 * For non-local hosting, the CORS policies and Content Security Policy must be updated to include your domains. Server/client domains can be updated through `config.json` and `.env` files, however CSP must be updated in `index.html` of the client.
