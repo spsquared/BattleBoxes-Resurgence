@@ -20,9 +20,9 @@ export class GameHostManager {
     private readonly hosts: Map<string, GameHostRunner> = new Map();
 
     /**
-     * @param {SocketIOServer} io Socket.IO server
-     * @param {Database} db Database connection
-     * @param {Logger} logger Logger instance
+     * @param io Socket.IO server
+     * @param db Database connection
+     * @param logger Logger instance
      */
     constructor(io: SocketIOServer, db: Database, logger: Logger) {
         this.io = io;
@@ -32,7 +32,7 @@ export class GameHostManager {
 
     /**
      * Fetch a list of all hosts, returning only joinable (in lobby) games if requested.
-     * @returns {GameHostRunner[]} Array of hosts
+     * @returns Array of hosts
      */
     getGames(onlyJoinable: boolean = false): GameHostRunner[] {
         const list = Array.from(this.hosts.values());
@@ -42,9 +42,9 @@ export class GameHostManager {
 
     /**
      * Create a new game host (by a player) (with optional settings) and add it to the game list.
-     * @param {string} username Username of game creator (checks for validity)
-     * @param {{ maxPlayers?: number, aiPlayers?: number }} options Game options (default 8 players, 2 AI players)
-     * @returns {GameHostRunner} New host, with specified options
+     * @param username Username of game creator (checks for validity)
+     * @param options Game options (default 8 players, 2 AI players)
+     * @returns New host, with specified options
      */
     createGame(username: string, options?: Partial<GameHostOptions>): GameHostRunner {
         const runner = new GameHostRunner(this.io, this.db, username, {
@@ -59,8 +59,8 @@ export class GameHostManager {
 
     /**
      * Fetch a game host by its id.
-     * @param {string} id Id of the game host to find
-     * @returns {GameHostRunner | undefined} Game host or undefined if not found
+     * @param id Id of the game host to find
+     * @returns Game host or undefined if not found
      */
     getGame(id: string): GameHostRunner | undefined {
         return this.hosts.get(id);
@@ -68,8 +68,8 @@ export class GameHostManager {
 
     /**
      * End a game by its unique ID, returning true if a game was found and ended (otherwise false).
-     * @param {string} id ID of the game host to terminate
-     * @returns {Promise<boolean>} Success status
+     * @param id ID of the game host to terminate
+     * @returns Success status
      */
     async endGame(id: string): Promise<boolean> {
         const runner = this.hosts.get(id);
@@ -108,11 +108,11 @@ export class GameHostRunner {
     private readonly playersReady: Set<string> = new Set();
 
     /**
-     * @param {SocketIOServer} io Socket.IO server
-     * @param {Database} db Database connection
-     * @param {string} hostUsername Username of host player (checks for validity) 
-     * @param {GameHostOptions} options Game options (cannot be changed after creation)
-     * @param {Logger} logger Logger instance
+     * @param io Socket.IO server
+     * @param db Database connection
+     * @param hostUsername Username of host player (checks for validity) 
+     * @param options Game options (cannot be changed after creation)
+     * @param logger Logger instance
      */
     constructor(io: SocketIOServer, db: Database, hostUsername: string, options: GameHostOptions, logger: Logger) {
         // make sure no overlapping ids (counter would prevent this but id is used as game join code) (also 2.1 billion possible join codes oof)
@@ -178,8 +178,8 @@ export class GameHostRunner {
 
     /**
      * Add a player to the game, returning a verification code the client must use to connect to the game. 
-     * @param {string} username Username of player (checks for validity)
-     * @returns {Promise<string | null>} Verification code, or null if player does not actually exist
+     * @param username Username of player (checks for validity)
+     * @returns Verification code, or null if player does not actually exist
      */
     async addPlayer(username: string): Promise<string | AccountOpResult> {
         this.logger.info(`Adding ${username} to game`, true);
@@ -215,9 +215,9 @@ export class GameHostRunner {
 
     /**
      * Remove a player from the game (with optional reason), returning if a player was removed.
-     * @param {string} username Username of player
-     * @param {string | undefined} reason Reason (usually for kicks)
-     * @returns {Promise<boolean>} If a player was removed
+     * @param username Username of player
+     * @param reason Reason (usually for kicks)
+     * @returns If a player was removed
      */
     async removePlayer(username: string, reason?: string): Promise<boolean> {
         const socket = this.players.get(username);

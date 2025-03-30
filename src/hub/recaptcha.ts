@@ -10,8 +10,8 @@ export interface RecaptchaResponse {
 }
 /**
  * Verify a reCAPTCHA token using Google's servers.
- * @param {string} token User-supplied token to validate
- * @param {string} ip User (remote) ip
+ * @param token User-supplied token to validate
+ * @param ip User (remote) ip
  * @returns Server response or error (if one occured during request)
  */
 export const validateRecaptcha = async (token: string, ip: string): Promise<RecaptchaResponse | Error> => {

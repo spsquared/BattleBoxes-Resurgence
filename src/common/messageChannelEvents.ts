@@ -18,7 +18,7 @@ export class MessageChannelEventEmitter {
     private readonly listeners: Map<string, Set<(...data: any[]) => any>> = new Map();
 
     /**
-     * @param {MessagePort | Worker} messagePort A `MessagePort` or `Worker`
+     * @param messagePort A `MessagePort` or `Worker`
      */
     constructor(messagePort: MessagePort | Worker) {
         this.port = messagePort;
@@ -53,8 +53,8 @@ export class MessageChannelEventEmitter {
 
     /**
      * Emit an event with arbitrary data accompanying it. If the `data` is a `MessagePort` instance, it will automatically transfer it.
-     * @param {string} event Event name
-     * @param {any} data Any amount of arguments of any type, as long as it is compatible with `MessagePort`'s `postMessage`
+     * @param event Event name
+     * @param data Any amount of arguments of any type, as long as it is compatible with `MessagePort`'s `postMessage`
      */
     emit(event: string, ...data: any[]): void {
         this.port.postMessage([event, data], (data.length == 1 && data[0] instanceof MessagePort) ? [data[0]] : []);
@@ -62,8 +62,8 @@ export class MessageChannelEventEmitter {
 
     /**
      * Add a listener function for an event.
-     * @param {string} event Event name
-     * @param {function} listener Listener function (can accept arbitrary number of arguments)
+     * @param event Event name
+     * @param listener Listener function (can accept arbitrary number of arguments)
      */
     addEventListener(event: string, listener: (...data: any[]) => any): void {
         if (this.listeners.has(event)) this.listeners.get(event)!.add(listener);
@@ -71,9 +71,9 @@ export class MessageChannelEventEmitter {
     }
     /**
      * Remove a listener function for an event, returning if the listener was found and removed.
-     * @param {string} event Event name
-     * @param {function} listener Listener function (must be the same function passed to {@link addEventListener})
-     * @returns {boolean} `true` if the listener function was removed, otherwise `false`
+     * @param event Event name
+     * @param)
+     * @returns `true` if the listener function was removed, otherwise `false`
      */
     removeEventListener(event: string, listener: (...data: any[]) => any): boolean {
         const listeners = this.listeners.get(event);
@@ -83,8 +83,8 @@ export class MessageChannelEventEmitter {
     }
     /**
      * Remove all listener functions for an event (or all listeners if `event` is `undefined`), returning if any listeners were found and removed.
-     * @param {string} event Event name or `undefined`
-     * @returns {boolean} `true` if any listener function was removed, otherwise `false`
+     * @param event Event name or `undefined`
+     * @returns `true` if any listener function was removed, otherwise `false`
      */
     removeAllListeners(event?: string): boolean {
         if (event !== undefined) return this.listeners.delete(event);
@@ -94,8 +94,8 @@ export class MessageChannelEventEmitter {
     }
     /**
      * Add a listener function for an event.
-     * @param {string} event Event name
-     * @param {function} listener Listener function (can accept arbitrary number of arguments)
+     * @param event Event name
+     * @param listener Listener function (can accept arbitrary number of arguments)
      * @alias {@link addEventListener}
      */
     on(event: string, listener: (...data: any[]) => any): void {
@@ -103,9 +103,9 @@ export class MessageChannelEventEmitter {
     }
     /**
      * Remove a listener function for an event, returning if the listener was found and removed.
-     * @param {string} event Event name
-     * @param {function} listener Listener function (must be the same function passed to {@link addEventListener})
-     * @returns {boolean} `true` if the listener function was removed, otherwise `false`
+     * @param event Event name
+     * @param)
+     * @returns `true` if the listener function was removed, otherwise `false`
      * @alias {@link removeEventListener}
      */
     off(event: string, listener: (...data: any[]) => any): boolean {
@@ -113,8 +113,8 @@ export class MessageChannelEventEmitter {
     }
     /**
      * Add a listener function for an event that is only executed once, then removed.
-     * @param {string} event Event name
-     * @param {function} listener Listener function (can accept arbitrary number of arguments)
+     * @param event Event name
+     * @param listener Listener function (can accept arbitrary number of arguments)
      */
     once(event: string, listener: (...data: any[]) => any): void {
         const l = (...data: any[]) => {
@@ -125,8 +125,8 @@ export class MessageChannelEventEmitter {
     }
     /**
      * Returns all listener functions for an event, or undefined if there are no listeners.
-     * @param {string} event Event name
-     * @returns {((...data: any) => any)[] | undefined} Array of listener functions or undefined if no listeners
+     * @param event Event name
+     * @returns Array of listener functions or undefined if no listeners
      */
     getEventListeners(event: string): ((...data: any[]) => any)[] | undefined {
         const listeners = this.listeners.get(event)?.values();

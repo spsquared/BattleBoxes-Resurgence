@@ -18,8 +18,11 @@ if (['CONFIG_PATH', 'GAME_SRC_PATH', 'RECAPTCHA_SECRET', ...(!config.useFileData
 const configLoadTime = performance.now() - start;
 
 // start server
-import { FileLogger } from '../common/log';
-const logger = new FileLogger(config.logPath);
+import { FileLogger, MultiLogger } from '../common/log';
+const logger = new MultiLogger([
+    new FileLogger(config.logPath),
+    new FileLogger(path.resolve(config.logPath, 'recent.log'), false, false)
+]);
 logger.info('Starting server...');
 logger.debug('BASE_PATH: ' + config.path);
 logger.debug('GAME_SRC_PATH: ' + config.gameSourcePath);

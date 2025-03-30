@@ -24,49 +24,49 @@ export interface Database {
 
     /**
      * Fetches a list of all usernames from the database.
-     * @returns {string[] | null} List of usernames, or null if error occured
+     * @returns List of usernames, or null if error occured
      */
     getAccountList(): Promise<string[] | null>;
     /**
      * Create an account in the database.
-     * @param {string} username Unique username - operation fails if not distinct
-     * @param {string} password Password - irretrievable after write, will be encrypted with bcrypt
-     * @returns {AccountOpResult} Creation status
+     * @param username Unique username - operation fails if not distinct
+     * @param password Password - irretrievable after write, will be encrypted with bcrypt
+     * @returns Creation status
      */
     createAccount(username: string, password: string): Promise<AccountOpResult>;
     /**
      * Check credentials against an existing account.
-     * @param {string} username Username
-     * @param {string} password Password
-     * @returns {AccountOpResult} Check status
+     * @param username Username
+     * @param password Password
+     * @returns Check status
      */
     checkAccount(username: string, password: string): Promise<AccountOpResult>;
     /**
      * Get user data for an account.
-     * @param {string} username Username
-     * @returns {AccountData | AccountOpResult} AccountData or an error code
+     * @param username Username
+     * @returns AccountData or an error code
      */
     getAccountData(username: string): Promise<AccountData | AccountOpResult>;
     /**
      * Overwrite user data for an account. *Only uses part of the data*.
-     * @param {string} username Username
-     * @param {AccountData} userData New data - not all is used
-     * @returns {AccountOpResult} Update status
+     * @param username Username
+     * @param userData New data - not all is used
+     * @returns Update status
      */
     updateAccountData(userData: AccountData): Promise<AccountOpResult>;
     /**
      * Change the password of an account. Requires that the existing password is correct.
-     * @param {string} username Username
-     * @param {string} password Current password
-     * @param {string} newPassword New password
-     * @returns {AccountOpResult} Update status
+     * @param username Username
+     * @param password Current password
+     * @param newPassword New password
+     * @returns Update status
      */
     changeAccountPassword(username: string, password: string, newPassword: string): Promise<AccountOpResult>;
     /**
      * Delete an account. Requires that the password is correct.
-     * @param {string} username Username
-     * @param {string} password Password
-     * @returns {AccountOpResult} Deletion status
+     * @param username Username
+     * @param password Password
+     * @returns Deletion status
      */
     deleteAccount(username: string, password: string): Promise<AccountOpResult>;
 }

@@ -25,9 +25,9 @@ export class SessionTokenHandler<DType> {
 
     /**
      * Create and register a new token that optionally expires after some time.
-     * @param {DType} linkedData Data to associate with the new token
-     * @param {number | undefined} expiration Seconds until expiration removes the token
-     * @returns {string} Access token
+     * @param linkedData Data to associate with the new token
+     * @param expiration Seconds until expiration removes the token
+     * @returns Access token
      */
     createToken(linkedData: DType, expiration?: number): string {
         const token = randomUUID();
@@ -38,7 +38,7 @@ export class SessionTokenHandler<DType> {
 
     /**
      * Get a map of all tokens and corresponding data.
-     * @returns {Map<string, DType>} Copy of token map
+     * @returns Copy of token map
      */
     getTokens(): Map<string, DType> {
         const ret = new Map<string, DType>();
@@ -48,8 +48,8 @@ export class SessionTokenHandler<DType> {
 
     /**
      * Check if a token is registered.
-     * @param {string} token Token to check
-     * @returns {boolean} If the token is registered
+     * @param token Token to check
+     * @returns If the token is registered
      */
     tokenExists(token: string): boolean {
         return this.tokens.has(token);
@@ -57,8 +57,8 @@ export class SessionTokenHandler<DType> {
 
     /**
      * Check token expiration time.
-     * @param {string} token Token to check
-     * @returns {number | undefined} Expiration time, if the token exists and has an expiration
+     * @param token Token to check
+     * @returns Expiration time, if the token exists and has an expiration
      */
     tokenExpiration(token: string): number | undefined {
         return this.tokenExists(token) ? this.tokens.get(token)!.expiration : undefined;
@@ -66,9 +66,9 @@ export class SessionTokenHandler<DType> {
 
     /**
      * Update token expiration time.
-     * @param {string} token Token to update
-     * @param {number} expiration New expiration duration in seconds, added onto the current time
-     * @returns {boolean} If a token was found and the expiration time updated
+     * @param token Token to update
+     * @param expiration New expiration duration in seconds, added onto the current time
+     * @returns If a token was found and the expiration time updated
      */
     extendTokenExpiration(token: string, expiration: number): boolean {
         if (!this.tokenExists(token)) return false;
@@ -78,8 +78,8 @@ export class SessionTokenHandler<DType> {
 
     /**
      * Get the linked data for a token if it exists.
-     * @param {string} token Token to check
-     * @returns {DType | null} Token linked data or null if not exists
+     * @param token Token to check
+     * @returns Token linked data or null if not exists
      */
     getTokenData(token: string): DType | null {
         if (!this.tokens.has(token)) return null;
@@ -88,9 +88,9 @@ export class SessionTokenHandler<DType> {
 
     /**
      * Set the linked data for a token if it exists.
-     * @param {string} token Token to check
-     * @param {DType} linkedData New data
-     * @returns {boolean} If a token was found and the data updated
+     * @param token Token to check
+     * @param linkedData New data
+     * @returns If a token was found and the data updated
      */
     setTokenData(token: string, linkedData: DType): boolean {
         const existing = this.tokens.get(token);
@@ -105,8 +105,8 @@ export class SessionTokenHandler<DType> {
 
     /**
      * Check if any token has the linked data requested.
-     * @param {DType} linkedData Data to search for
-     * @returns {boolean} If any token with equal linked data is found
+     * @param linkedData Data to search for
+     * @returns If any token with equal linked data is found
      */
     dataExists(linkedData: DType): boolean {
         return this.tokenData.has(linkedData);
@@ -114,8 +114,8 @@ export class SessionTokenHandler<DType> {
 
     /**
      * Unregister a token for all permissions.
-     * @param {string} token Token to unregister
-     * @returns {boolean} If a token was previously registered and is now unregistered
+     * @param token Token to unregister
+     * @returns If a token was previously registered and is now unregistered
      */
     removeToken(token: string): boolean {
         const data = this.tokens.get(token);
