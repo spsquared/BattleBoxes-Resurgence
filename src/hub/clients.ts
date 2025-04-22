@@ -12,7 +12,6 @@ import config from '@/config';
 import { AccountOpResult, Database } from '../common/database';
 import { SessionTokenHandler } from './cryptoUtil';
 import GameHostManager from './hostRunner';
-import { validateRecaptcha } from './recaptcha';
 
 /**
  * Ravioli function to segment client networking (logging in, joining games, game resources, etc.)
@@ -52,28 +51,6 @@ export const addClientRoutes = (expapp: Express, db: Database, hosts: GameHostMa
             next();
         } else res.sendStatus(401);
     };
-    const captchaCheck: RequestHandler = async (req, res, next) => {
-        if (req.body == null || typeof req.body.captcha != 'string') {
-            logger.debug(`reCAPTCHA validation failed: recieved ${JSON.stringify(req.body)}`);
-            res.sendStatus(400);
-            return;
-        }
-        const recaptchaResponse = await validateRecaptcha(req.body.captcha, req.ip ?? 'UNKNOWN IP');
-        if (recaptchaResponse instanceof Error) {
-            logger.handleError('reCAPTCHA verification failed:', recaptchaResponse);
-            res.sendStatus(500);
-        } else if (recaptchaResponse == undefined || recaptchaResponse.success !== true || recaptchaResponse.score < 0.8) {
-            logger.info('reCAPTCHA verification failed:');
-            logger.debug(JSON.stringify(recaptchaResponse), true);
-            res.sendStatus(422);
-        } else {
-            if (config.debugMode) {
-                logger.debug('reCAPTCHA verification successful:');
-                logger.debug(JSON.stringify(recaptchaResponse), true);
-            }
-            next();
-        }
-    };
 
     const recentSignups = new Set<string>();
     const checkValidCreds = (username: string, password: string) => {
@@ -83,7 +60,7 @@ export const addClientRoutes = (expapp: Express, db: Database, hosts: GameHostMa
         // can only reach if logged in, also used to check if logged in
         res.status(200).send(authTokens.getTokenData(req.cookies.authToken));
     });
-    app.post('/login', authentication, bodyParser.json(), captchaCheck, async (req, res) => {
+    app.post('/login', authentication, bodyParser.json(), async (req, res) => {
         if (req.body == null || !checkValidCreds(req.body.username, req.body.password)) {
             logger.debug(`/login validation failed: recieved ${JSON.stringify(req.body)}`);
             res.sendStatus(400);
@@ -102,7 +79,7 @@ export const addClientRoutes = (expapp: Express, db: Database, hosts: GameHostMa
         }
         res.sendStatus(accountOpToHttpCode(stat));
     });
-    app.post('/signup', authentication, bodyParser.json(), captchaCheck, async (req, res) => {
+    app.post('/signup', authentication, bodyParser.json(), async (req, res) => {
         if (req.body == null || !checkValidCreds(req.body.username, req.body.password)) {
             logger.debug(`/signup validation failed: recieved ${JSON.stringify(req.body)}`);
             res.sendStatus(400);
@@ -146,7 +123,7 @@ export const addClientRoutes = (expapp: Express, db: Database, hosts: GameHostMa
         const games = hostManager.getGames(true).map((host) => host.gameInfo);
         res.json(games);
     });
-    app.post('/games/joinGame/:gameId', authentication, bodyParser.json(), captchaCheck, async (req, res) => {
+    app.post('/games/joinGame/:gameId', authentication, bodyParser.json(), async (req, res) => {
         const hostRunner = hostManager.getGame(req.params.gameId.toUpperCase());
         if (hostRunner === undefined) res.sendStatus(404);
         else if (authTokens.tokenExists(req.cookies.authToken)) {
@@ -157,7 +134,7 @@ export const addClientRoutes = (expapp: Express, db: Database, hosts: GameHostMa
             logger.info(`${username} joined game ${hostRunner.id}`);
         } else res.sendStatus(500);
     });
-    app.post('/games/createGame', authentication, bodyParser.json(), captchaCheck, async (req, res) => {
+    app.post('/games/createGame', authentication, bodyParser.json(), async (req, res) => {
         if (req.body == null || !validateStructure(req.body, {
             maxPlayers: 0,
             aiPlayers: 0,
